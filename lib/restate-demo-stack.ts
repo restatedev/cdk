@@ -1,8 +1,12 @@
 import * as cdk from "aws-cdk-lib";
+import * as api_gw from "aws-cdk-lib/aws-apigateway";
 import * as ec2 from "aws-cdk-lib/aws-ec2";
 import * as iam from "aws-cdk-lib/aws-iam";
+import * as lambda from "aws-cdk-lib/aws-lambda";
+import * as lambda_node from "aws-cdk-lib/aws-lambda-nodejs";
 // import * as ssm from "aws-cdk-lib/aws-ssm";
 import { Construct } from "constructs";
+import * as path from "node:path";
 
 export class RestateDemoStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: cdk.StackProps & { githubPat: string }) {
@@ -25,7 +29,7 @@ export class RestateDemoStack extends cdk.Stack {
       // "aws secretsmanager get-secret-value --secret-id \"/restate/gh-pat\" --query SecretString --output text | sudo docker login ghcr.io -u NA --password-stdin",
       `echo ${props.githubPat} | sudo docker login ghcr.io -u NA --password-stdin`,
       "sudo service docker start",
-      "sudo docker run --name restate_dev --rm -p 8081:8081 -p 9091:9091 -p 9090:9090 -p 5432:5432 ghcr.io/restatedev/restate-dist:latest",
+      "sudo docker run --name restate --rm -d --network=host ghcr.io/restatedev/restate-dist:latest",
     );
 
     const ssmEnabledInstanceRole = new iam.Role(this, "SSMRole", {
@@ -53,8 +57,56 @@ export class RestateDemoStack extends cdk.Stack {
       userData: runRestateDaemonCommands,
     });
 
-    new cdk.CfnOutput(this, "RestateHostInstanceId", {
-      value: restateHost.instanceId,
+    const greeterService = new lambda_node.NodejsFunction(this, "GreeterService", {
+      entry: path.join(__dirname, "restate-service/greeter.ts"),
+      architecture: lambda.Architecture.ARM_64,
+      runtime: lambda.Runtime.NODEJS_LATEST,
+      memorySize: 128,
+      bundling: {
+        sourceMap: true,
+      },
+    });
+
+    const api = new api_gw.RestApi(this, "Greeter", {
+      binaryMediaTypes: ["application/proto", "application/restate"],
+    });
+    api.deploymentStage = new api_gw.Stage(this, "Default", {
+      stageName: "default",
+      deployment: new api_gw.Deployment(this, "GreeterApiDeployment", {
+        api,
+      }),
+    });
+
+    // const greeterBackendApiKey = api.addApiKey("ApiKey", {
+    //   description: "Greeter backend API Key",
+    //   apiKeyName: "greeterApiKey",
+    //   value: "SuperSecretApiKey92481",
+    // });
+
+    const usagePlan = api.addUsagePlan("UsagePlan", {
+      name: "UsagePlan",
+      throttle: {
+        rateLimit: 5,
+        burstLimit: 20,
+      },
+      // You may want to further restrict the usage of your API by adding a quota:
+      // quota: {
+      //   limit: 10_000,
+      //   period: api_gw.Period.DAY,
+      // },
+    });
+    usagePlan.addApiStage({
+      stage: api.deploymentStage,
+    });
+
+    const resource = api.root.addResource("greeter");
+    resource.addProxy({
+      defaultIntegration: new api_gw.LambdaIntegration(greeterService),
+      anyMethod: true,
+    });
+
+    new cdk.CfnOutput(this, "GreeterServiceEndpointUrl", {
+      value: api.url,
     });
   }
 }
