@@ -11,6 +11,8 @@ if (!githubPat) {
   throw new Error("Please provide a GitHub PAT via the context variable githubPat or the environment variable GITHUB_PAT");
 }
 
-new RestateDemoStack(app, "pavel-RestateStack", {
+const prefix = app.node.tryGetContext("prefix") ?? process.env["USER"];
+
+new RestateDemoStack(app, `${prefix}-RestateStack`, {
   githubPat,
 });
