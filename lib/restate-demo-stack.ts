@@ -66,8 +66,6 @@ export class RestateDemoStack extends cdk.Stack {
       securityGroupName: "RestateSecurityGroup",
       description: "Allow inbound traffic to Restate",
     });
-    // restateInstanceSecurityGroup.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(8080), "Allow inbound on port 8080");
-    // restateInstanceSecurityGroup.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(9070), "Allow inbound on port 9070");
 
     const greeterService = new lambda_node.NodejsFunction(this, "GreeterService", {
       description: "Greeter service handler",
@@ -112,7 +110,7 @@ export class RestateDemoStack extends cdk.Stack {
       anyMethod: true,
     });
 
-    const loadBalancer = new elbv2.ApplicationLoadBalancer(this, "RestateAlb", {
+    const ingressLoadBalancer = new elbv2.ApplicationLoadBalancer(this, "RestateAlb", {
       vpc,
       internetFacing: true,
     });
@@ -125,7 +123,7 @@ export class RestateDemoStack extends cdk.Stack {
         protocol: elbv2.Protocol.HTTP,
       },
     });
-    loadBalancer.addListener("Listener", {
+    ingressLoadBalancer.addListener("Listener", {
       port: 80,
       defaultTargetGroups: [targetGroup],
     });
@@ -136,7 +134,7 @@ export class RestateDemoStack extends cdk.Stack {
       allowAllOutbound: false,
     });
     albSecurityGroup.addEgressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(8080), "Allow HTTP traffic to Restate service");
-    loadBalancer.addSecurityGroup(albSecurityGroup);
+    ingressLoadBalancer.addSecurityGroup(albSecurityGroup);
 
     restateInstanceSecurityGroup.addIngressRule(albSecurityGroup, ec2.Port.tcp(8080), "Allow traffic from ALB to Restate ingress");
     vpc.privateSubnets.forEach((subnet) => {
@@ -147,8 +145,6 @@ export class RestateDemoStack extends cdk.Stack {
     });
     restateInstance.addSecurityGroup(restateInstanceSecurityGroup);
 
-    // After the Restate instance comes up (and reports as healthy!), we want to call it on port 9070 and register the Lambda service
-    // We'll do this using a custom CDK resource that depends on the Lambda.
     const registrationHandler = new lambda_node.NodejsFunction(this, "RestateRegistrationHandler", {
       description: "Restate custom registration handler",
       entry: path.join(__dirname, "restate-constructs/register-service-handler.ts"),
@@ -185,14 +181,8 @@ export class RestateDemoStack extends cdk.Stack {
     registerGreeterService.node.addDependency(restateInstance);
     registerGreeterService.node.addDependency(greeterService);
 
-    new cdk.CfnOutput(this, "GreeterServiceEndpointUrl", {
-      value: greeterServiceEndpoint.url,
-    });
-    new cdk.CfnOutput(this, "InstancePrivateDnsName", {
-      value: `${restateInstance.instancePrivateDnsName}`,
-    });
-    new cdk.CfnOutput(this, "RestateLBEndpointUrl", {
-      value: `http://${loadBalancer.loadBalancerDnsName}:80`,
+    new cdk.CfnOutput(this, "RestateIngressLoadBalancerEndpoint", {
+      value: `http://${ingressLoadBalancer.loadBalancerDnsName}:80`,
     });
   }
 }
