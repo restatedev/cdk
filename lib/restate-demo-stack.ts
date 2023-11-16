@@ -6,7 +6,6 @@ import * as elbv2 from "aws-cdk-lib/aws-elasticloadbalancingv2";
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as lambda_node from "aws-cdk-lib/aws-lambda-nodejs";
-// import * as ssm from "aws-cdk-lib/aws-ssm";
 import { Construct } from "constructs";
 import * as path from "node:path";
 import { InstanceTarget } from "aws-cdk-lib/aws-elasticloadbalancingv2-targets";
@@ -19,18 +18,11 @@ export class RestateDemoStack extends cdk.Stack {
       maxAzs: 3,
     });
 
-    // TODO: To avoid baking the secret into the CloudFormation template, please manually add as plaintext a GitHub PAT which is authorized to access restate-dist
-    // const githubPatSecret = new ssm.StringParameter(this, "GithubPatSecret", {
-    //   parameterName: "/restate/gh-pat",
-    //   stringValue: "replace-me",
-    // });
-
     const runRestateDaemonCommands = ec2.UserData.forLinux();
     runRestateDaemonCommands.addCommands(
       "sudo yum update -y",
       "sudo yum install -y docker",
-      // "aws secretsmanager get-secret-value --secret-id \"/restate/gh-pat\" --query SecretString --output text | sudo docker login ghcr.io -u NA --password-stdin",
-      `echo ${props.githubPat} | sudo docker login ghcr.io -u NA --password-stdin`,
+      "aws secretsmanager get-secret-value --secret-id \"/restate/docker/github-token\" --query SecretString --output text | sudo docker login ghcr.io -u NA --password-stdin",
       "sudo service docker start",
       "sudo docker run --name restate --rm -d --network=host ghcr.io/restatedev/restate-dist:latest",
     );
@@ -48,7 +40,6 @@ export class RestateDemoStack extends cdk.Stack {
       instanceType: new ec2.InstanceType("t4g.micro"),
       machineImage: ec2.MachineImage.latestAmazonLinux2023({
         cpuType: ec2.AmazonLinuxCpuType.ARM_64,
-        edition: ec2.AmazonLinuxEdition.MINIMAL,
       }),
       role: restateInstanceRole,
       userData: runRestateDaemonCommands,
