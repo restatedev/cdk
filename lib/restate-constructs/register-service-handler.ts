@@ -42,8 +42,9 @@ export const handler: Handler<CloudFormationCustomResourceEvent, Partial<CloudFo
         throw new Error(`Health check failed: ${healthResponse.statusText} (${healthResponse.status})`);
       }
 
-      console.log("Triggering registration at ");
-      const discoveryResponse = await fetch(`${props.metaEndpoint}/endpoints`, {
+      const discoveryEndpointUrl = `${props.metaEndpoint}/endpoints`;
+      console.log(`Triggering registration at ${discoveryEndpointUrl}`);
+      const discoveryResponse = await fetch(discoveryEndpointUrl, {
         method: "POST",
         body: JSON.stringify({
           uri: props.serviceEndpoint,
