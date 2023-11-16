@@ -1,4 +1,5 @@
 import * as cdk from "aws-cdk-lib";
+import * as cr from "aws-cdk-lib/custom-resources";
 import * as api_gw from "aws-cdk-lib/aws-apigateway";
 import * as ec2 from "aws-cdk-lib/aws-ec2";
 import * as elbv2 from "aws-cdk-lib/aws-elasticloadbalancingv2";
@@ -18,7 +19,7 @@ export class RestateDemoStack extends cdk.Stack {
       maxAzs: 3,
     });
 
-    // To avoid baking the secret into the CloudFormation template, please manually add as plaintext a GitHub PAT which is authorized to access restate-dist
+    // TODO: To avoid baking the secret into the CloudFormation template, please manually add as plaintext a GitHub PAT which is authorized to access restate-dist
     // const githubPatSecret = new ssm.StringParameter(this, "GithubPatSecret", {
     //   parameterName: "/restate/gh-pat",
     //   stringValue: "replace-me",
@@ -33,6 +34,7 @@ export class RestateDemoStack extends cdk.Stack {
       "sudo service docker start",
       "sudo docker run --name restate --rm -d --network=host ghcr.io/restatedev/restate-dist:latest",
     );
+    // TODO: send output to CloudWatch logs
 
     const restateInstanceRole = new iam.Role(this, "SSMRole", {
       assumedBy: new iam.ServicePrincipal("ec2.amazonaws.com"),
@@ -64,58 +66,52 @@ export class RestateDemoStack extends cdk.Stack {
       securityGroupName: "RestateSecurityGroup",
       description: "Allow inbound traffic to Restate",
     });
-    restateInstanceSecurityGroup.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(8080), "Allow inbound on port 8080");
+    // restateInstanceSecurityGroup.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(8080), "Allow inbound on port 8080");
+    // restateInstanceSecurityGroup.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(9070), "Allow inbound on port 9070");
 
     const greeterService = new lambda_node.NodejsFunction(this, "GreeterService", {
+      description: "Greeter service handler",
       entry: path.join(__dirname, "restate-service/greeter.ts"),
       architecture: lambda.Architecture.ARM_64,
       runtime: lambda.Runtime.NODEJS_LATEST,
       memorySize: 128,
       bundling: {
         sourceMap: true,
+        minify: true,
+      },
+      environment: {
+        NODE_OPTIONS: "--enable-source-maps",
       },
     });
     greeterService.grantInvoke(restateInstanceRole);
 
-    const api = new api_gw.RestApi(this, "Greeter", {
+    const greeterServiceEndpoint = new api_gw.RestApi(this, "Greeter", {
       binaryMediaTypes: ["application/proto", "application/restate"],
     });
-    api.deploymentStage = new api_gw.Stage(this, "Default", {
+    greeterServiceEndpoint.deploymentStage = new api_gw.Stage(this, "Default", {
       stageName: "default",
       deployment: new api_gw.Deployment(this, "GreeterApiDeployment", {
-        api,
+        api: greeterServiceEndpoint,
       }),
     });
 
-    // const greeterBackendApiKey = api.addApiKey("ApiKey", {
-    //   description: "Greeter backend API Key",
-    //   apiKeyName: "greeterApiKey",
-    //   value: "SuperSecretApiKey92481",
-    // });
-
-    const usagePlan = api.addUsagePlan("UsagePlan", {
+    const usagePlan = greeterServiceEndpoint.addUsagePlan("UsagePlan", {
       name: "UsagePlan",
       throttle: {
         rateLimit: 5,
         burstLimit: 20,
       },
-      // You may want to further restrict the usage of your API by adding a quota:
-      // quota: {
-      //   limit: 10_000,
-      //   period: api_gw.Period.DAY,
-      // },
     });
     usagePlan.addApiStage({
-      stage: api.deploymentStage,
+      stage: greeterServiceEndpoint.deploymentStage,
     });
 
-    const greeterProxy = api.root.addResource("greeter");
+    const greeterProxy = greeterServiceEndpoint.root.addResource("greeter");
     greeterProxy.addProxy({
       defaultIntegration: new api_gw.LambdaIntegration(greeterService),
       anyMethod: true,
     });
 
-    // Create a new Network Load Balancer - needed in front of the EC2 instance
     const loadBalancer = new elbv2.ApplicationLoadBalancer(this, "RestateAlb", {
       vpc,
       internetFacing: true,
@@ -143,10 +139,57 @@ export class RestateDemoStack extends cdk.Stack {
     loadBalancer.addSecurityGroup(albSecurityGroup);
 
     restateInstanceSecurityGroup.addIngressRule(albSecurityGroup, ec2.Port.tcp(8080), "Allow traffic from ALB to Restate ingress");
+    vpc.privateSubnets.forEach((subnet) => {
+      restateInstanceSecurityGroup.addIngressRule(ec2.Peer.ipv4(subnet.ipv4CidrBlock), ec2.Port.tcp(9070), "Allow traffic from the VPC to Restate meta");
+    });
+    vpc.privateSubnets.forEach((subnet) => {
+      restateInstanceSecurityGroup.addIngressRule(ec2.Peer.ipv4(subnet.ipv4CidrBlock), ec2.Port.tcp(8080), "Allow traffic from the VPC to Restate ingress");
+    });
     restateInstance.addSecurityGroup(restateInstanceSecurityGroup);
 
+    // After the Restate instance comes up (and reports as healthy!), we want to call it on port 9070 and register the Lambda service
+    // We'll do this using a custom CDK resource that depends on the Lambda.
+    const registrationHandler = new lambda_node.NodejsFunction(this, "RestateRegistrationHandler", {
+      description: "Restate custom registration handler",
+      entry: path.join(__dirname, "restate-constructs/register-service-handler.ts"),
+      architecture: lambda.Architecture.ARM_64,
+      runtime: lambda.Runtime.NODEJS_LATEST,
+      memorySize: 128,
+      timeout: cdk.Duration.seconds(30),
+      bundling: {
+        sourceMap: true,
+        minify: true,
+      },
+      environment: {
+        NODE_OPTIONS: "--enable-source-maps",
+      },
+      vpc, // This Lambda needs to be in the same VPC as the Restate instance to be able to access its meta endpoint
+      vpcSubnets: {
+        subnets: vpc.privateSubnets,
+      },
+    });
+    const registerServiceProvider = new cr.Provider(this, "RestateServiceRegistrationProvider", {
+      onEventHandler: registrationHandler,
+    });
+
+    const registerGreeterService = new cdk.CustomResource(this, "RegisterGreeterService", {
+      serviceToken: registerServiceProvider.serviceToken,
+      resourceType: "Custom::RestateRegisterService",
+      properties: {
+        ingressEndpoint: `http://${restateInstance.instancePrivateDnsName}:8080`,
+        metaEndpoint: `http://${restateInstance.instancePrivateDnsName}:9070`,
+        serviceEndpoint: `${greeterServiceEndpoint.urlForPath("/greeter")}`,
+        functionVersion: greeterService.currentVersion.version,
+      },
+    });
+    registerGreeterService.node.addDependency(restateInstance);
+    registerGreeterService.node.addDependency(greeterService);
+
     new cdk.CfnOutput(this, "GreeterServiceEndpointUrl", {
-      value: api.url,
+      value: greeterServiceEndpoint.url,
+    });
+    new cdk.CfnOutput(this, "InstancePrivateDnsName", {
+      value: `${restateInstance.instancePrivateDnsName}`,
     });
     new cdk.CfnOutput(this, "RestateLBEndpointUrl", {
       value: `http://${loadBalancer.loadBalancerDnsName}:80`,

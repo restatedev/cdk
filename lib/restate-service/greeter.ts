@@ -12,7 +12,7 @@
 import * as restate from "@restatedev/restate-sdk";
 
 const doGreet = async (ctx: restate.RpcContext, name: string) => {
-  return `Hello ${name} :-)`;
+  return `Hello, ${name}! :-)`;
 };
 
 const doGreetAndRemember = async (ctx: restate.RpcContext, name: string) => {
@@ -20,7 +20,7 @@ const doGreetAndRemember = async (ctx: restate.RpcContext, name: string) => {
   seen += 1;
 
   ctx.set("seen", seen);
-  return `Hello ${name} for the #${seen} time :-)`;
+  return `Hello, ${name}, for the #${seen} time! :-)`;
 };
 
 const router = restate.keyedRouter({
