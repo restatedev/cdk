@@ -43,20 +43,13 @@ export class RestateDemoStack extends cdk.Stack {
       ],
     });
 
-    // const machineImage = new ec2.AmazonLinuxImage({
-    //   generation: ec2.AmazonLinuxGeneration.AMAZON_LINUX_2023,
-    //   userData,
-    // });
-
-    // Temp workaround for insufficient SSM permissions to look up the al2023 AMI
-    const machineImage = new ec2.GenericLinuxImage({
-      "eu-central-1": "ami-0ca82fa36091d6ada", // al2023-ami-2023.2.20231030.1-kernel-6.1-arm64
-    });
-
     const restateInstance = new ec2.Instance(this, "RestateHost", {
       vpc,
       instanceType: new ec2.InstanceType("t4g.micro"),
-      machineImage,
+      machineImage: ec2.MachineImage.latestAmazonLinux2023({
+        cpuType: ec2.AmazonLinuxCpuType.ARM_64,
+        edition: ec2.AmazonLinuxEdition.MINIMAL,
+      }),
       role: restateInstanceRole,
       userData: runRestateDaemonCommands,
     });
