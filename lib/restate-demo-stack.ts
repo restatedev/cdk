@@ -6,6 +6,8 @@ import * as elbv2 from "aws-cdk-lib/aws-elasticloadbalancingv2";
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as lambda_node from "aws-cdk-lib/aws-lambda-nodejs";
+import * as logs from "aws-cdk-lib/aws-logs";
+import * as secrets from "aws-cdk-lib/aws-secretsmanager";
 import { Construct } from "constructs";
 import * as path from "node:path";
 import { InstanceTarget } from "aws-cdk-lib/aws-elasticloadbalancingv2-targets";
@@ -18,22 +20,31 @@ export class RestateDemoStack extends cdk.Stack {
       maxAzs: 3,
     });
 
-    const runRestateDaemonCommands = ec2.UserData.forLinux();
-    runRestateDaemonCommands.addCommands(
-      "sudo yum update -y",
-      "sudo yum install -y docker",
-      "aws secretsmanager get-secret-value --secret-id \"/restate/docker/github-token\" --query SecretString --output text | sudo docker login ghcr.io -u NA --password-stdin",
-      "sudo service docker start",
-      "sudo docker run --name restate --rm -d --network=host ghcr.io/restatedev/restate-dist:latest",
-    );
-    // TODO: send output to CloudWatch logs
-
-    const restateInstanceRole = new iam.Role(this, "SSMRole", {
+    const restateInstanceRole = new iam.Role(this, "InstanceRole", {
       assumedBy: new iam.ServicePrincipal("ec2.amazonaws.com"),
       managedPolicies: [
         iam.ManagedPolicy.fromAwsManagedPolicyName("AmazonSSMManagedInstanceCore"),
       ],
     });
+
+    const restateLogGroup = new logs.LogGroup(this, "RestateLogGroup", {
+      logGroupName: "restate",
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      retention: logs.RetentionDays.ONE_MONTH,
+    });
+    restateLogGroup.grantWrite(restateInstanceRole);
+
+    const githubToken = secrets.Secret.fromSecretNameV2(this, "GithubToken", "/restate/docker/github-token");
+    githubToken.grantRead(restateInstanceRole);
+
+    const restateInitCommands = ec2.UserData.forLinux();
+    restateInitCommands.addCommands(
+      "sudo yum update -y",
+      "sudo yum install -y docker",
+      "aws secretsmanager get-secret-value --secret-id \"/restate/docker/github-token\" --query SecretString --output text | sudo docker login ghcr.io -u NA --password-stdin",
+      "sudo service docker start",
+      `sudo docker run --name restate --rm -d --network=host -e RESTATE_OBSERVABILITY__LOG__FORMAT=Json -e RUST_LOG=info,restate_worker::partition=warn --log-driver=awslogs --log-opt awslogs-group=restate ghcr.io/restatedev/restate-dist:latest`,
+    );
 
     const restateInstance = new ec2.Instance(this, "RestateHost", {
       vpc,
@@ -42,7 +53,7 @@ export class RestateDemoStack extends cdk.Stack {
         cpuType: ec2.AmazonLinuxCpuType.ARM_64,
       }),
       role: restateInstanceRole,
-      userData: runRestateDaemonCommands,
+      userData: restateInitCommands,
     });
 
     const restateInstanceSecurityGroup = new ec2.SecurityGroup(this, "RestateSecurityGroup", {
@@ -151,8 +162,7 @@ export class RestateDemoStack extends cdk.Stack {
     const registerServiceProvider = new cr.Provider(this, "RestateServiceRegistrationProvider", {
       onEventHandler: registrationHandler,
     });
-
-    const registerGreeterService = new cdk.CustomResource(this, "RegisterGreeterService", {
+    new cdk.CustomResource(this, "RegisterGreeterService", {
       serviceToken: registerServiceProvider.serviceToken,
       resourceType: "Custom::RestateRegisterService",
       properties: {
@@ -162,8 +172,6 @@ export class RestateDemoStack extends cdk.Stack {
         functionVersion: greeterService.currentVersion.version,
       },
     });
-    registerGreeterService.node.addDependency(restateInstance);
-    registerGreeterService.node.addDependency(greeterService);
 
     new cdk.CfnOutput(this, "RestateIngressLoadBalancerEndpoint", {
       value: `http://${ingressLoadBalancer.loadBalancerDnsName}:80`,
