@@ -7,6 +7,41 @@ CDK construct library for deploying standalone [Restate](https://restate.dev) an
 In order to access the Restate Docker image, you need to make a GitHub access token with permission to retrieve the
 Restate beta distribution available in your AWS account.
 
-```sh
+```shell
 aws secretsmanager create-secret --name /restate/docker/github-token --secret-string $GITHUB_TOKEN
+```
+
+To deploy the self-hosted Restate instance, run:
+
+```shell
+npx cdk deploy
+```
+
+By default, this will create a stack prefixed with the value of `$USER` - you can override this using the CDK context
+parameter `prefix` like this:
+
+```shell
+npx cdk deploy --context prefix="dev"
+```
+
+You will be prompted to confirm the creation of new security-sensitive resources.
+
+Use the value of the `RestateIngressEndpoint` output of the CloudFormation stack to communicate with the Restate
+broker (if you customized the deployment prefix above, you will need to update the stack name):
+
+```shell
+export RESTATE_INGRESS_ENDPOINT=$(aws cloudformation describe-stacks --stack-name ${USER}-RestateStack \
+    --query "Stacks[0].Outputs[?OutputKey=='RestateIngressEndpoint'].OutputValue" --output text)
+```
+
+```shell
+curl -X POST -w \\n ${RESTATE_INGRESS_ENDPOINT}/Greeter/greet -H 'content-type: application/json' -d '{"key": "Restate"}'
+```
+
+You will get output similar to the following:
+
+```json
+{
+  "response": "Hello, Restate! :-)"
+}
 ```
