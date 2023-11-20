@@ -43,6 +43,7 @@ export class RestateLambdaServiceCollection extends Construct {
     handler: lambda.Function
   }) {
     service.handler.grantInvoke(restate.instanceRole);
+    service.handler.currentVersion.grantInvoke(restate.instanceRole); // Allow explicit version invocation
 
     const serviceHttpResource = restate.serviceApi.root.addResource(service.path);
     serviceHttpResource.addProxy({
