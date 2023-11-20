@@ -16,7 +16,7 @@ export const handler: Handler<CloudFormationCustomResourceEvent, Partial<CloudFo
 
     if (event.RequestType === "Delete") {
       return {
-        // TODO do we want to actually deregister the service here?
+        // TODO: deregister service on delete (https://github.com/restatedev/restate-cdk-support/issues/5)
         Reason: "No-op",
         Status: "SUCCESS",
       } satisfies Partial<CloudFormationCustomResourceResponse>;
@@ -26,37 +26,39 @@ export const handler: Handler<CloudFormationCustomResourceEvent, Partial<CloudFo
       const props = event.ResourceProperties as RegistrationProperties;
 
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 3000);
-
+      const healthCheckTimeout = setTimeout(() => controller.abort(), 3000);
       const healthCheckUrl = `${props.ingressEndpoint}/grpc.health.v1.Health/Check`;
       console.log(`Performing health check against: ${healthCheckUrl}`);
       const healthResponse = await fetch(healthCheckUrl,
         {
           signal: controller.signal,
         })
-        .finally(() => clearTimeout(timeout));
+        .finally(() => clearTimeout(healthCheckTimeout));
       console.log(`Got health response back: ${await healthResponse.text()}`);
 
       if (!(healthResponse.status >= 200 && healthResponse.status < 300)) {
-        // TODO: add retry until service is healthy, or an overall timeout is reached
+        // TODO: retry until service is healthy, or some overall timeout is reached
         throw new Error(`Health check failed: ${healthResponse.statusText} (${healthResponse.status})`);
       }
 
+      const registerCallTimeout = setTimeout(() => controller.abort(), 3000);
       const discoveryEndpointUrl = `${props.metaEndpoint}/endpoints`;
-      console.log(`Triggering registration at ${discoveryEndpointUrl}`);
-      const discoveryResponse = await fetch(discoveryEndpointUrl, {
-        method: "POST",
-        body: JSON.stringify({
-          uri: props.serviceEndpoint,
-        }),
-        headers: {
-          "Content-Type": "application/json",
-        },
-      });
+      const registrationRequest = JSON.stringify({ uri: props.serviceEndpoint });
+      console.log(`Triggering registration at ${discoveryEndpointUrl}: ${registrationRequest}`);
+      const discoveryResponse = await fetch(discoveryEndpointUrl,
+        {
+          signal: controller.signal,
+          method: "POST",
+          body: registrationRequest,
+          headers: {
+            "Content-Type": "application/json",
+          },
+        })
+        .finally(() => clearTimeout(registerCallTimeout));
       console.log(`Got registration response back: ${await discoveryResponse.text()} (${discoveryResponse.status})`);
 
       if (!(healthResponse.status >= 200 && healthResponse.status < 300)) {
-        // TODO: add retry until service is healthy, or an overall timeout is reached
+        // TODO: retry until successful, or some overall timeout is reached
         throw new Error(`Health check failed: ${healthResponse.statusText} (${healthResponse.status})`);
       }
 
@@ -67,7 +69,7 @@ export const handler: Handler<CloudFormationCustomResourceEvent, Partial<CloudFo
 
     return {
       Data: {
-        // TODO: it would be neat if we could return a Restate service handler id back to CloudFormation
+        // it would be neat if we could return a unique Restate event id back to CloudFormation to close the loop
       },
       Status: "SUCCESS",
     } satisfies Partial<CloudFormationCustomResourceResponse>;

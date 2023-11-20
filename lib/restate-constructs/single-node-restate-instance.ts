@@ -13,6 +13,9 @@ import * as cdk from "aws-cdk-lib";
 import * as cr from "aws-cdk-lib/custom-resources";
 import { LogGroup } from "aws-cdk-lib/aws-logs";
 
+const RESTATE_INGRESS_PORT = 8080;
+const RESTATE_META_PORT = 9070;
+
 export type RestateInstanceProps = {
   /**
    * The name of the CloudWatch Logs group to use for Restate log output. NB: the construct will
@@ -103,13 +106,14 @@ export class SingleNodeRestateInstance extends Construct {
     });
     const targetGroup = new elb_v2.ApplicationTargetGroup(this, "TargetGroup", {
       vpc: this.vpc,
-      port: 8080,
+      port: RESTATE_INGRESS_PORT,
       targets: [new InstanceTarget(restateInstance)],
       healthCheck: {
         path: "/grpc.health.v1.Health/Check",
         protocol: elb_v2.Protocol.HTTP,
       },
     });
+    // TODO: Make this HTTPS (https://github.com/restatedev/restate-cdk-support/issues/2)
     ingressLoadBalancer.addListener("Listener", {
       port: 80,
       defaultTargetGroups: [targetGroup],
@@ -120,24 +124,27 @@ export class SingleNodeRestateInstance extends Construct {
       description: "ALB security group",
       allowAllOutbound: false,
     });
-    albSecurityGroup.addEgressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(8080), "Allow HTTP traffic to Restate service");
+    albSecurityGroup.addEgressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(RESTATE_INGRESS_PORT), "Allow outbound HTTP traffic to Restate ingress");
     ingressLoadBalancer.addSecurityGroup(albSecurityGroup);
 
-    restateInstanceSecurityGroup.addIngressRule(albSecurityGroup, ec2.Port.tcp(8080), "Allow traffic from ALB to Restate ingress");
+    restateInstanceSecurityGroup.addIngressRule(albSecurityGroup, ec2.Port.tcp(RESTATE_INGRESS_PORT), "Allow traffic from ALB to Restate ingress");
+
+    // These rules allow the service registration component to trigger service discovery as needed; the requests
+    // originate from a VPC-bound Lambda function that backs the custom resource.
     this.vpc.privateSubnets.forEach((subnet) => {
-      restateInstanceSecurityGroup.addIngressRule(ec2.Peer.ipv4(subnet.ipv4CidrBlock), ec2.Port.tcp(9070), "Allow traffic from the VPC to Restate meta");
+      restateInstanceSecurityGroup.addIngressRule(ec2.Peer.ipv4(subnet.ipv4CidrBlock), ec2.Port.tcp(RESTATE_META_PORT), "Allow traffic from the VPC to Restate meta");
     });
     this.vpc.privateSubnets.forEach((subnet) => {
-      restateInstanceSecurityGroup.addIngressRule(ec2.Peer.ipv4(subnet.ipv4CidrBlock), ec2.Port.tcp(8080), "Allow traffic from the VPC to Restate ingress");
+      restateInstanceSecurityGroup.addIngressRule(ec2.Peer.ipv4(subnet.ipv4CidrBlock), ec2.Port.tcp(RESTATE_INGRESS_PORT), "Allow traffic from the VPC to Restate ingress");
     });
     restateInstance.addSecurityGroup(restateInstanceSecurityGroup);
 
     this.serviceApi = this.serviceHttpApi(props);
     this.serviceDiscoveryProvider = this.registrationProvider();
 
-    this.publicIngressEndpoint = `http://${ingressLoadBalancer.loadBalancerDnsName}:80`;
-    this.privateIngressEndpoint = `http://${this.instance.instancePrivateDnsName}:8080`;
-    this.metaEndpoint = `http://${this.instance.instancePrivateDnsName}:9070`;
+    this.publicIngressEndpoint = `http://${ingressLoadBalancer.loadBalancerDnsName}`;
+    this.privateIngressEndpoint = `http://${this.instance.instancePrivateDnsName}:${RESTATE_INGRESS_PORT}`;
+    this.metaEndpoint = `http://${this.instance.instancePrivateDnsName}:${RESTATE_META_PORT}`;
   }
 
   private registrationProvider() {
@@ -155,7 +162,7 @@ export class SingleNodeRestateInstance extends Construct {
       environment: {
         NODE_OPTIONS: "--enable-source-maps",
       },
-      vpc: this.vpc, // This Lambda needs to be in the same VPC as the Restate instance to be able to access its meta endpoint
+      vpc: this.vpc, // This Lambda must be in the same VPC as the Restate instance to be able to access its meta endpoint
       vpcSubnets: {
         subnets: this.vpc.privateSubnets,
       },
@@ -166,7 +173,7 @@ export class SingleNodeRestateInstance extends Construct {
     });
   }
 
-  // This is going to go away when we switch to direct Lambda invoke
+  // TODO: Remove API Gateway and switch to direct Lambda integration (https://github.com/restatedev/restate-cdk-support/issues/3)
   private serviceHttpApi(props: RestateInstanceProps) {
     const serviceApi = new api_gw.RestApi(this, "ServiceApi", {
       binaryMediaTypes: ["application/proto", "application/restate"],

@@ -71,7 +71,7 @@ class RestateServiceRegistrar extends Construct {
         metaEndpoint: props.restate.metaEndpoint,
         serviceEndpoint: props.restate.serviceApi.urlForPath(`/${props.service.path}`),
         functionVersion: props.service.handler.currentVersion.version,
-        // TODO: plumb through an EC2 instance configuration hash so that discovery is triggered on host changes too
+        // TODO: force a refresh on EC2 instance configuration changes, too (https://github.com/restatedev/restate-cdk-support/issues/4)
       },
     });
   }
