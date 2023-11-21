@@ -42,8 +42,11 @@ export class RestateLambdaServiceCollection extends Construct {
     path: RestatePath,
     handler: lambda.Function
   }) {
-    service.handler.grantInvoke(restate.instanceRole);
-    service.handler.currentVersion.grantInvoke(restate.instanceRole); // Allow explicit version invocation
+    cdk.Annotations.of(service.handler).acknowledgeWarning("@aws-cdk/aws-lambda:addPermissionsToVersionOrAlias",
+      "We specifically want to grant invoke permissions on all handler versions, " +
+      "not just the currently deployed one, as there may be suspended invocations against older versions");
+    service.handler.grantInvoke(restate.instanceRole); // Grants invoke permissions on all versions & aliases
+    service.handler.currentVersion.grantInvoke(restate.instanceRole); // CDK ack doesn't work; this is silences warning
 
     const serviceHttpResource = restate.serviceApi.root.addResource(service.path);
     serviceHttpResource.addProxy({
