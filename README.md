@@ -4,13 +4,6 @@ CDK construct library for deploying standalone [Restate](https://restate.dev) an
 
 ## Deploying the demo project
 
-In order to access the Restate Docker image, you need to make a GitHub access token with permission to retrieve the
-Restate beta distribution available in your AWS account.
-
-```shell
-aws secretsmanager create-secret --name /restate/docker/github-token --secret-string $GITHUB_TOKEN
-```
-
 To deploy the self-hosted Restate instance, run:
 
 ```shell

@@ -2,7 +2,6 @@ import { Construct } from "constructs";
 import { LogGroup } from "aws-cdk-lib/aws-logs";
 import * as ec2 from "aws-cdk-lib/aws-ec2";
 import * as iam from "aws-cdk-lib/aws-iam";
-import * as secrets from "aws-cdk-lib/aws-secretsmanager";
 import * as elb_v2 from "aws-cdk-lib/aws-elasticloadbalancingv2";
 import { InstanceTarget } from "aws-cdk-lib/aws-elasticloadbalancingv2-targets";
 import * as lambda_node from "aws-cdk-lib/aws-lambda-nodejs";
@@ -44,17 +43,13 @@ export class SingleNodeRestateInstance extends Construct {
     });
     props.logGroup.grantWrite(this.instanceRole);
 
-    const secretName = props.githubTokenSecretName ?? "/restate/docker/github-token";
-    const githubToken = secrets.Secret.fromSecretNameV2(this, "GithubToken", secretName);
-    githubToken.grantRead(this.instanceRole);
-
     const restateInitCommands = ec2.UserData.forLinux();
     restateInitCommands.addCommands(
       "sudo yum update -y",
       "sudo yum install -y docker",
-      "aws secretsmanager get-secret-value --secret-id \"/restate/docker/github-token\" --query SecretString --output text | sudo docker login ghcr.io -u NA --password-stdin",
+      "sudo systemctl enable docker.service",
       "sudo service docker start",
-      `sudo docker run --name restate --rm -d --network=host -e RESTATE_OBSERVABILITY__LOG__FORMAT=Json -e RUST_LOG=info,restate_worker::partition=warn --log-driver=awslogs --log-opt awslogs-group=restate ghcr.io/restatedev/restate-dist:${RESTATE_DOCKER_DEFAULT_TAG}`,
+      `sudo docker run --name restate --restart on-failure:10 --detach --volume /var/restate:/target --network=host -e RESTATE_OBSERVABILITY__LOG__FORMAT=Json -e RUST_LOG=info,restate_worker::partition=warn --log-driver=awslogs --log-opt awslogs-group=restate ghcr.io/restatedev/restate-dist:${RESTATE_DOCKER_DEFAULT_TAG}`,
     );
 
     const restateInstance = new ec2.Instance(this, "Host", {
