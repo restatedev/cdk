@@ -3,11 +3,10 @@ import { Handler } from "aws-lambda/handler";
 import { CloudFormationCustomResourceEvent } from "aws-lambda/trigger/cloudformation-custom-resource";
 import fetch from "node-fetch";
 
-interface RegistrationProperties {
-  ingressEndpoint?: string;
+export interface RegistrationProperties {
   metaEndpoint?: string;
   serviceEndpoint?: string;
-  functionVersion?: number;
+  serviceLambdaArn?: string;
 }
 
 export const handler: Handler<CloudFormationCustomResourceEvent, Partial<CloudFormationCustomResourceResponse>> =
@@ -27,7 +26,7 @@ export const handler: Handler<CloudFormationCustomResourceEvent, Partial<CloudFo
 
       const controller = new AbortController();
       const healthCheckTimeout = setTimeout(() => controller.abort(), 3000);
-      const healthCheckUrl = `${props.ingressEndpoint}/grpc.health.v1.Health/Check`;
+      const healthCheckUrl = `${props.metaEndpoint}/health`;
       console.log(`Performing health check against: ${healthCheckUrl}`);
       const healthResponse = await fetch(healthCheckUrl,
         {
@@ -43,7 +42,8 @@ export const handler: Handler<CloudFormationCustomResourceEvent, Partial<CloudFo
 
       const registerCallTimeout = setTimeout(() => controller.abort(), 3000);
       const discoveryEndpointUrl = `${props.metaEndpoint}/endpoints`;
-      const registrationRequest = JSON.stringify({ uri: props.serviceEndpoint });
+      // const registrationRequest = JSON.stringify({ uri: props.serviceEndpoint });
+      const registrationRequest = JSON.stringify({ arn: props.serviceLambdaArn });
       console.log(`Triggering registration at ${discoveryEndpointUrl}: ${registrationRequest}`);
       const discoveryResponse = await fetch(discoveryEndpointUrl,
         {
@@ -55,11 +55,11 @@ export const handler: Handler<CloudFormationCustomResourceEvent, Partial<CloudFo
           },
         })
         .finally(() => clearTimeout(registerCallTimeout));
-      console.log(`Got registration response back: ${await discoveryResponse.text()} (${discoveryResponse.status})`);
+      console.log(`Got registration response back: ${discoveryResponse.status}`);
 
       if (!(healthResponse.status >= 200 && healthResponse.status < 300)) {
         // TODO: retry until successful, or some overall timeout is reached
-        throw new Error(`Health check failed: ${healthResponse.statusText} (${healthResponse.status})`);
+        throw new Error(`Service registration failed: ${healthResponse.statusText} (${healthResponse.status})`);
       }
 
       console.log("Returning success.");

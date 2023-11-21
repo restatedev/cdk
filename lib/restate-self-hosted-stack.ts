@@ -27,7 +27,7 @@ export class RestateSelfHostedStack extends cdk.Stack {
     });
 
     const restateInstance = new SingleNodeRestateInstance(this, "Restate", {
-      githubTokenSecretName: props.githubTokenSecretName,
+      ...props,
       logGroup: new logs.LogGroup(this, "RestateLogGroup", {
         logGroupName: "restate",
         removalPolicy: cdk.RemovalPolicy.RETAIN,

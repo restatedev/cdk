@@ -1,42 +1,19 @@
 import { Construct } from "constructs";
-import * as logs from "aws-cdk-lib/aws-logs";
+import { LogGroup } from "aws-cdk-lib/aws-logs";
 import * as ec2 from "aws-cdk-lib/aws-ec2";
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as secrets from "aws-cdk-lib/aws-secretsmanager";
 import * as elb_v2 from "aws-cdk-lib/aws-elasticloadbalancingv2";
 import { InstanceTarget } from "aws-cdk-lib/aws-elasticloadbalancingv2-targets";
-import * as api_gw from "aws-cdk-lib/aws-apigateway";
 import * as lambda_node from "aws-cdk-lib/aws-lambda-nodejs";
 import path from "node:path";
 import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as cdk from "aws-cdk-lib";
 import * as cr from "aws-cdk-lib/custom-resources";
-import { LogGroup } from "aws-cdk-lib/aws-logs";
 
 const RESTATE_INGRESS_PORT = 8080;
 const RESTATE_META_PORT = 9070;
-
-export type RestateInstanceProps = {
-  /**
-   * The name of the CloudWatch Logs group to use for Restate log output. NB: the construct will
-   * grant the necessary permissions to the instance role to write to this log group.
-   */
-  logGroup: logs.LogGroup;
-
-  /**
-   * The name of the Secrets Store secret that contains the GitHub token to use for Docker login.
-   * This is `/restate/docker/github-token` by default.
-   */
-  githubTokenPath?: string;
-
-  /**
-   * Temporary! This will disappear once we move to direct Lambda calls.
-   */
-  serviceApiThrottle?: {
-    rateLimit?: number,
-    burstLimit?: number,
-  },
-};
+const RESTATE_DOCKER_DEFAULT_TAG = "latest";
 
 /**
  * Creates a Restate service deployment backed by a single EC2 instance,
@@ -51,9 +28,6 @@ export class SingleNodeRestateInstance extends Construct {
   readonly publicIngressEndpoint: string;
   readonly privateIngressEndpoint: string;
   readonly metaEndpoint: string;
-
-  // This API is used to provide an HTTP endpoint to call handlers; we'll shortly be migrating to direct Lambda access
-  readonly serviceApi: api_gw.RestApi;
 
   constructor(scope: Construct, id: string, props: { githubTokenSecretName: string; logGroup: LogGroup }) {
     super(scope, id);
@@ -80,7 +54,7 @@ export class SingleNodeRestateInstance extends Construct {
       "sudo yum install -y docker",
       "aws secretsmanager get-secret-value --secret-id \"/restate/docker/github-token\" --query SecretString --output text | sudo docker login ghcr.io -u NA --password-stdin",
       "sudo service docker start",
-      `sudo docker run --name restate --rm -d --network=host -e RESTATE_OBSERVABILITY__LOG__FORMAT=Json -e RUST_LOG=info,restate_worker::partition=warn --log-driver=awslogs --log-opt awslogs-group=restate ghcr.io/restatedev/restate-dist:latest`,
+      `sudo docker run --name restate --rm -d --network=host -e RESTATE_OBSERVABILITY__LOG__FORMAT=Json -e RUST_LOG=info,restate_worker::partition=warn --log-driver=awslogs --log-opt awslogs-group=restate ghcr.io/restatedev/restate-dist:${RESTATE_DOCKER_DEFAULT_TAG}`,
     );
 
     const restateInstance = new ec2.Instance(this, "Host", {
@@ -139,7 +113,6 @@ export class SingleNodeRestateInstance extends Construct {
     });
     restateInstance.addSecurityGroup(restateInstanceSecurityGroup);
 
-    this.serviceApi = this.serviceHttpApi(props);
     this.serviceDiscoveryProvider = this.registrationProvider();
 
     this.publicIngressEndpoint = `http://${ingressLoadBalancer.loadBalancerDnsName}`;
@@ -171,31 +144,5 @@ export class SingleNodeRestateInstance extends Construct {
     return new cr.Provider(this, "RegistrationProvider", {
       onEventHandler: registrationHandler,
     });
-  }
-
-  // TODO: Remove API Gateway and switch to direct Lambda integration (https://github.com/restatedev/restate-cdk-support/issues/3)
-  private serviceHttpApi(props: RestateInstanceProps) {
-    const serviceApi = new api_gw.RestApi(this, "ServiceApi", {
-      binaryMediaTypes: ["application/proto", "application/restate"],
-    });
-    serviceApi.deploymentStage = new api_gw.Stage(this, "Default", {
-      stageName: "default",
-      deployment: new api_gw.Deployment(this, "Deployment", {
-        api: serviceApi,
-      }),
-    });
-
-    const usagePlan = serviceApi.addUsagePlan("UsagePlan", {
-      name: "UsagePlan",
-      throttle: {
-        rateLimit: props.serviceApiThrottle?.rateLimit ?? 10,
-        burstLimit: props.serviceApiThrottle?.burstLimit ?? 20,
-      },
-    });
-    usagePlan.addApiStage({
-      stage: serviceApi.deploymentStage,
-    });
-
-    return serviceApi;
   }
 }

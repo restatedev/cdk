@@ -1,8 +1,8 @@
 import { Construct } from "constructs";
 import * as lambda from "aws-cdk-lib/aws-lambda";
-import * as api_gw from "aws-cdk-lib/aws-apigateway";
 import { SingleNodeRestateInstance } from "./single-node-restate-instance";
 import * as cdk from "aws-cdk-lib";
+import { RegistrationProperties } from "./lambda/register-service-handler";
 
 /**
  * A Restate RPC service path. Example: `greeter`.
@@ -31,7 +31,6 @@ export class RestateLambdaServiceCollection extends Construct {
     this.serviceHandlers = props.serviceHandlers;
   }
 
-
   public register(restate: SingleNodeRestateInstance) {
     for (const [path, handler] of Object.entries(this.serviceHandlers)) {
       this.registerHandler(restate, { path, handler });
@@ -45,14 +44,8 @@ export class RestateLambdaServiceCollection extends Construct {
     cdk.Annotations.of(service.handler).acknowledgeWarning("@aws-cdk/aws-lambda:addPermissionsToVersionOrAlias",
       "We specifically want to grant invoke permissions on all handler versions, " +
       "not just the currently deployed one, as there may be suspended invocations against older versions");
-    service.handler.grantInvoke(restate.instanceRole); // Grants invoke permissions on all versions & aliases
-    service.handler.currentVersion.grantInvoke(restate.instanceRole); // CDK ack doesn't work; this is silences warning
-
-    const serviceHttpResource = restate.serviceApi.root.addResource(service.path);
-    serviceHttpResource.addProxy({
-      defaultIntegration: new api_gw.LambdaIntegration(service.handler),
-      anyMethod: true,
-    });
+    service.handler.currentVersion.grantInvoke(restate.instanceRole); // CDK ack doesn't work, silence above warning
+    service.handler.grantInvoke(restate.instanceRole); // Grants access to all handler versions for ongoing invocations
 
     new RestateServiceRegistrar(this, service.handler.node.id + "Discovery", { restate, service });
   }
@@ -71,12 +64,9 @@ class RestateServiceRegistrar extends Construct {
       serviceToken: props.restate.serviceDiscoveryProvider.serviceToken,
       resourceType: "Custom::RestateServiceRegistrar",
       properties: {
-        ingressEndpoint: props.restate.privateIngressEndpoint,
         metaEndpoint: props.restate.metaEndpoint,
-        serviceEndpoint: props.restate.serviceApi.urlForPath(`/${props.service.path}`),
-        functionVersion: props.service.handler.currentVersion.version,
-        // TODO: force a refresh on EC2 instance configuration changes, too (https://github.com/restatedev/restate-cdk-support/issues/4)
-      },
+        serviceLambdaArn: props.service.handler.currentVersion.functionArn,
+      } satisfies RegistrationProperties,
     });
   }
 }
