@@ -1,14 +1,40 @@
-# Welcome to your CDK TypeScript project
+# Restate CDK support
 
-This is a blank project for CDK development with TypeScript.
+CDK construct library for deploying standalone [Restate](https://restate.dev) and Restate service handlers to AWS.
 
-The `cdk.json` file tells the CDK Toolkit how to execute your app.
+## Deploying the demo project
 
-## Useful commands
+To deploy the self-hosted Restate instance, run:
 
-* `npm run build`   compile typescript to js
-* `npm run watch`   watch for changes and compile
-* `npm run test`    perform the jest unit tests
-* `cdk deploy`      deploy this stack to your default AWS account/region
-* `cdk diff`        compare deployed stack with current state
-* `cdk synth`       emits the synthesized CloudFormation template
+```shell
+npx cdk deploy
+```
+
+By default, this will create a stack prefixed with the value of `$USER` - you can override this using the CDK context
+parameter `prefix` like this:
+
+```shell
+npx cdk deploy --context prefix="dev"
+```
+
+You will be prompted to confirm the creation of new security-sensitive resources.
+
+Use the value of the `RestateIngressEndpoint` output of the CloudFormation stack to communicate with the Restate
+broker (if you customized the deployment prefix above, you will need to update the stack name):
+
+```shell
+export RESTATE_INGRESS_ENDPOINT=$(aws cloudformation describe-stacks --stack-name ${USER}-RestateStack \
+    --query "Stacks[0].Outputs[?OutputKey=='RestateIngressEndpoint'].OutputValue" --output text)
+```
+
+```shell
+curl -X POST -w \\n ${RESTATE_INGRESS_ENDPOINT}/Greeter/greet -H 'content-type: application/json' -d '{"key": "Restate"}'
+```
+
+You will get output similar to the following:
+
+```json
+{
+  "response": "Hello, Restate! :-)"
+}
+```
