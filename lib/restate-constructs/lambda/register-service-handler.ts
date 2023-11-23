@@ -42,7 +42,6 @@ export const handler: Handler<CloudFormationCustomResourceEvent, Partial<CloudFo
 
       const registerCallTimeout = setTimeout(() => controller.abort(), 3000);
       const discoveryEndpointUrl = `${props.metaEndpoint}/endpoints`;
-      // const registrationRequest = JSON.stringify({ uri: props.serviceEndpoint });
       const registrationRequest = JSON.stringify({ arn: props.serviceLambdaArn });
       console.log(`Triggering registration at ${discoveryEndpointUrl}: ${registrationRequest}`);
       const discoveryResponse = await fetch(discoveryEndpointUrl,

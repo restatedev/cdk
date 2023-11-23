@@ -23,8 +23,12 @@
     "typeRoots": [
       "./node_modules/@types"
     ],
-    "esModuleInterop": true
+    "esModuleInterop": true,
+    "outDir": "dist"
   },
+  "include": [
+    "lib/**/*"
+  ],
   "exclude": [
     "node_modules",
     "cdk.out"

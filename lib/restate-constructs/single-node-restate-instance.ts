@@ -28,7 +28,7 @@ export class SingleNodeRestateInstance extends Construct {
   readonly privateIngressEndpoint: string;
   readonly metaEndpoint: string;
 
-  constructor(scope: Construct, id: string, props: { githubTokenSecretName: string; logGroup: LogGroup }) {
+  constructor(scope: Construct, id: string, props: { logGroup: LogGroup }) {
     super(scope, id);
 
     this.vpc = new ec2.Vpc(this, "RestateVpc", {
