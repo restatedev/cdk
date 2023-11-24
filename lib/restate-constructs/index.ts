@@ -1,2 +1,2 @@
-export * from "./restate-lambda-services";
+export * from "./lambda-service-registry";
 export * from "./single-node-restate-instance";
