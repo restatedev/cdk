@@ -2,11 +2,19 @@ import { CloudFormationCustomResourceResponse } from "aws-lambda";
 import { Handler } from "aws-lambda/handler";
 import { CloudFormationCustomResourceEvent } from "aws-lambda/trigger/cloudformation-custom-resource";
 import fetch from "node-fetch";
+import * as cdk from "aws-cdk-lib";
 
 export interface RegistrationProperties {
+  servicePath?: string;
   metaEndpoint?: string;
   serviceEndpoint?: string;
   serviceLambdaArn?: string;
+  removalPolicy?: cdk.RemovalPolicy;
+}
+
+type EndpointResponse = {
+  id?: string,
+  services?: { name?: string, revision?: number }[]
 }
 
 /**
@@ -18,9 +26,20 @@ export const handler: Handler<CloudFormationCustomResourceEvent, Partial<CloudFo
     console.log({ event });
 
     if (event.RequestType === "Delete") {
+      const props = event.ResourceProperties as RegistrationProperties;
+      if (props.removalPolicy === cdk.RemovalPolicy.DESTROY) {
+        const controller = new AbortController();
+        const id = btoa(props.serviceLambdaArn!);
+        const deleteResponse = await fetch(`${props.metaEndpoint}/endpoints/${id}?force=true`,
+          {
+            signal: controller.signal,
+            method: "DELETE",
+          })
+          .finally(() => clearTimeout(registerCallTimeout));
+        console.log(`Got delete response back: ${deleteResponse.status}`);
+      }
+
       return {
-        // TODO: deregister service on delete (https://github.com/restatedev/restate-cdk-support/issues/5)
-        Reason: "No-op",
         Status: "SUCCESS",
       } satisfies Partial<CloudFormationCustomResourceResponse>;
     }
@@ -36,8 +55,8 @@ export const handler: Handler<CloudFormationCustomResourceEvent, Partial<CloudFo
         signal: controller.signal,
       })
       .finally(() => clearTimeout(healthCheckTimeout));
-    console.log(`Got health check response back: ${await healthResponse.text()}`);
 
+    console.log(`Got health check response back: ${healthResponse.status}`);
     if (!(healthResponse.status >= 200 && healthResponse.status < 300)) {
       console.error(`Restate health check failed: ${healthResponse.statusText} (${healthResponse.status})`);
       return {
@@ -65,13 +84,20 @@ export const handler: Handler<CloudFormationCustomResourceEvent, Partial<CloudFo
           .finally(() => clearTimeout(registerCallTimeout));
 
         console.log(`Got registration response back: ${discoveryResponse.status}`);
-        if (!(discoveryResponse.status >= 200 && discoveryResponse.status < 300)) {
-          // TODO: assert service name we get back matches what we expected to detect misconfigurations
-          // Sample response: {"id":"YXJuOmF3czpsYW1iZGE6ZXUtY2VudHJhbC0xOjY2MzQ4Nzc4MDA0MTpmdW5jdGlvbjpwYXZlbC1Ib2xpZGF5VHJpcHNTZXJ2aWNlU3RhY2stVHJpcEhhbmRsZXI2QjQ2NDRCRC1KU0Y0YTRBNGphTW46NQ==","services":[{"name":"trips","revision":1}]}
+
+        if (discoveryResponse.status >= 200 && discoveryResponse.status < 300) {
+          const response = await discoveryResponse.json() as EndpointResponse;
+
+          if (response?.services?.[0]?.name !== props.servicePath) {
+            console.error(`Service registration failed: ${discoveryResponse.statusText} (${discoveryResponse.status})`);
+            return {
+              Reason: `Restate service registration failed: name returned by service ("${response?.services?.[0]?.name})) does not match expected ("${props.servicePath}")`,
+              Status: "FAILED",
+            };
+          }
+
           return {
-            Data: {
-              // it would be neat if we could return a unique Restate event id back to CloudFormation to close the loop
-            },
+            Data: response,
             Status: "SUCCESS",
           } satisfies Partial<CloudFormationCustomResourceResponse>;
         }

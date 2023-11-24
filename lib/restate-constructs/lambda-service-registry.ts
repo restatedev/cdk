@@ -23,7 +23,10 @@ export type LambdaServiceRegistryProps = {
    */
   serviceHandlers: Record<RestatePath, lambda.Function>;
 
-  registrationProviderToken?: string;
+  /**
+   * Custom resource provider token required for service discovery.
+   */
+  registrationProviderToken: string;
 }
 
 /**
@@ -33,7 +36,7 @@ export type LambdaServiceRegistryProps = {
  */
 export class LambdaServiceRegistry extends Construct {
   private readonly serviceHandlers: Record<RestatePath, lambda.Function>;
-  private readonly registrationProviderToken?: string;
+  private readonly registrationProviderToken: string;
 
   constructor(scope: Construct, id: string, props: LambdaServiceRegistryProps) {
     super(scope, id);
@@ -43,27 +46,38 @@ export class LambdaServiceRegistry extends Construct {
   }
 
   public register(restate: RestateInstanceRef) {
+    const allowInvokeFunction = new iam.Policy(this, "AllowInvokeFunction", {
+      statements: [
+        new iam.PolicyStatement({
+          sid: "AllowInvokeAnyFunctionVersion",
+          actions: ["lambda:InvokeFunction"],
+          resources: Object.values(this.serviceHandlers)
+            .map(handler => handler.functionArn + ":*"),
+        }),
+      ],
+    });
+
+    const invokerRole = iam.Role.fromRoleArn(this, "InvokerRole", restate.invokerRoleArn);
+    invokerRole.attachInlinePolicy(allowInvokeFunction);
+
     for (const [path, handler] of Object.entries(this.serviceHandlers)) {
-      this.registerHandler(restate, { path, handler });
+      this.registerHandler(restate, { path, handler }, allowInvokeFunction);
     }
   }
 
   private registerHandler(restate: RestateInstanceRef, service: {
     path: RestatePath,
     handler: lambda.Function
-  }) {
-    const invokerRole = iam.Role.fromRoleArn(this, service.handler.node.id + "InvokerRole", restate.invokerRoleArn);
-    cdk.Annotations.of(service.handler).acknowledgeWarning("@aws-cdk/aws-register-service-handler:addPermissionsToVersionOrAlias",
-      "We specifically want to grant invoke permissions on all handler versions, " +
-      "not just the currently deployed one, as there may be suspended invocations against older versions");
-    service.handler.currentVersion.grantInvoke(invokerRole); // CDK ack doesn't work, this silences the warning above
-    service.handler.grantInvoke(invokerRole); // Grants access to all handler versions for ongoing invocations
-
-    new RestateServiceRegistrar(this, service.handler.node.id + "Discovery", {
+  }, allowInvokeFunction: iam.Policy) {
+    const registrar = new RestateServiceRegistrar(this, service.handler.node.id + "Discovery", {
       restate,
       service,
-      serviceToken: this.registrationProviderToken!,
+      serviceToken: this.registrationProviderToken,
     });
+
+    // CloudFormation doesn't know that Restate depends on this role to call services; we must ensure that Lambda
+    // permission changes are applied before we can trigger discovery (represented by the registrar).
+    registrar.node.addDependency(allowInvokeFunction);
   }
 }
 
@@ -84,10 +98,11 @@ class RestateServiceRegistrar extends Construct {
       serviceToken: props.serviceToken,
       resourceType: "Custom::RestateServiceRegistrar",
       properties: {
+        servicePath: props.service.path,
         metaEndpoint: props.restate.metaEndpoint,
         serviceLambdaArn: props.service.handler.currentVersion.functionArn,
+        removalPolicy: cdk.RemovalPolicy.DESTROY,
       } satisfies RegistrationProperties,
     });
-    // TODO: add a dependency on attaching Lambda invocation permissions to the Restate instance role
   }
 }
