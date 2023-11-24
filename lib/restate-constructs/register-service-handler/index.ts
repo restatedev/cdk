@@ -26,18 +26,18 @@ export const handler: Handler<CloudFormationCustomResourceEvent, Partial<CloudFo
     console.log({ event });
 
     if (event.RequestType === "Delete") {
-      const props = event.ResourceProperties as RegistrationProperties;
-      if (props.removalPolicy === cdk.RemovalPolicy.DESTROY) {
-        const controller = new AbortController();
-        const id = btoa(props.serviceLambdaArn!);
-        const deleteResponse = await fetch(`${props.metaEndpoint}/endpoints/${id}?force=true`,
-          {
-            signal: controller.signal,
-            method: "DELETE",
-          })
-          .finally(() => clearTimeout(registerCallTimeout));
-        console.log(`Got delete response back: ${deleteResponse.status}`);
-      }
+      // const props = event.ResourceProperties as RegistrationProperties;
+      // if (props.removalPolicy === cdk.RemovalPolicy.DESTROY) {
+      //   const controller = new AbortController();
+      //   const id = btoa(props.serviceLambdaArn!);
+      //   const deleteResponse = await fetch(`${props.metaEndpoint}/endpoints/${id}?force=true`,
+      //     {
+      //       signal: controller.signal,
+      //       method: "DELETE",
+      //     })
+      //     .finally(() => clearTimeout(registerCallTimeout));
+      //   console.log(`Got delete response back: ${deleteResponse.status}`);
+      // }
 
       return {
         Status: "SUCCESS",
