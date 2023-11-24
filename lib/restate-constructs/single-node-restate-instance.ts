@@ -21,6 +21,7 @@ const RESTATE_DOCKER_DEFAULT_TAG = "latest";
 export interface RestateInstance {
   readonly invokerRole: iam.Role;
   readonly metaEndpoint: string;
+  readonly registrationProviderToken: cdk.CfnOutput;
 }
 
 /**
@@ -31,7 +32,6 @@ export class SingleNodeRestateInstance extends Construct implements RestateInsta
   readonly instance: ec2.Instance;
   readonly invokerRole: iam.Role;
   readonly vpc: ec2.Vpc;
-  // readonly serviceDiscoveryProvider: cr.Provider;
 
   readonly publicIngressEndpoint: string;
   readonly privateIngressEndpoint: string;
