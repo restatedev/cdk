@@ -1,0 +1,48 @@
+name: Build and test
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    # prevent from running on forks
+    if: github.repository_owner == 'restatedev'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [ 19.x ]
+
+    steps:
+      - uses: actions/checkout@v3
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node-version }}
+          registry-url: 'https://registry.npmjs.org'
+      - run: npm ci
+      - run: npm run build
+      - run: npm run test
+      - run: mv $(npm pack) restatedev-restate-cdk.tgz
+      - uses: actions/upload-artifact@v3
+        with:
+          name: restatedev-restate-cdk
+          path: restatedev-restate-cdk.tgz
+          retention-days: 1
+          if-no-files-found: error
+
+      - name: Publish snapshot
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          # We're using 0.0.0 to avoid this version to be higher than released versions.
+          # To use it: 
+          # "@restatedev/restate-cdk": "^0.0.0-SNAPSHOT"
+          npm version 0.0.0-SNAPSHOT-$(date '+%Y%m%d%H%M%S') --git-tag-version false
+          # We use dist-tag dev for the snapshot releases, see https://docs.npmjs.com/cli/v9/commands/npm-dist-tag for more info
+          # A snapshot MUST not be published with latest tag (omitting --tag defaults to latest) to avoid users to install snapshot releases
+          # when using npm install
+          npm publish --tag dev --access public

@@ -1,6 +1,6 @@
 {
-  "name": "@restatedev/cdk-support",
-  "description": "CDK TypeScript constructs for Restate.dev",
+  "name": "@restate/restate-cdk",
+  "description": "Restate.dev CDK constructs",
   "version": "0.1.0",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
