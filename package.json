@@ -1,6 +1,6 @@
 {
-  "name": "@restatedev/cdk-support",
-  "description": "CDK TypeScript constructs for Restate.dev",
+  "name": "@restate/restate-cdk",
+  "description": "Restate.dev CDK constructs",
   "version": "0.1.0",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -13,7 +13,6 @@
     "cdk": "cdk"
   },
   "devDependencies": {
-    "@restatedev/restate-sdk": "^0.4.0",
     "@types/aws-lambda": "^8.10.126",
     "@types/jest": "^29.5.8",
     "@types/node": "20.9.0",
