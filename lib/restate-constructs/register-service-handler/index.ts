@@ -26,10 +26,15 @@ export const handler: Handler<CloudFormationCustomResourceEvent, Partial<CloudFo
     console.log({ event });
 
     if (event.RequestType === "Delete") {
+      // Since we retain older Lambda handler versions on update, we also leave the registered service alone. There may
+      // be unfinished invocations that require it; in the future we would want to inform Restate that we want to
+      // de-register the service, and wait for Restate to let us know that it is safe to delete the deployed Function
+      // version from Lambda.
+
       // const props = event.ResourceProperties as RegistrationProperties;
       // if (props.removalPolicy === cdk.RemovalPolicy.DESTROY) {
       //   const controller = new AbortController();
-      //   const id = btoa(props.serviceLambdaArn!);
+      //   const id = btoa(props.serviceLambdaArn!); // TODO: we should be treating service ids as opaque
       //   const deleteResponse = await fetch(`${props.metaEndpoint}/endpoints/${id}?force=true`,
       //     {
       //       signal: controller.signal,
