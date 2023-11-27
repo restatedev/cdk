@@ -1,7 +1,13 @@
 {
-  "name": "@restate/restate-cdk",
+  "name": "@restatedev/restate-cdk",
   "description": "Restate.dev CDK constructs",
   "version": "0.1.0",
+  "author": "Restate Developers",
+  "license": "MIT",
+  "email": "code@restate.dev",
+  "publishConfig": {
+    "@restatedev:registry": "https://registry.npmjs.org"
+  },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
@@ -29,5 +35,9 @@
     "aws-cdk-lib": "2.108.0",
     "constructs": "^10.0.0",
     "source-map-support": "^0.5.21"
+  },
+  "directories": {
+    "lib": "lib",
+    "test": "test"
   }
 }
