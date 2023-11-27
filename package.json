@@ -1,11 +1,13 @@
 {
-  "name": "restate-cdk-support",
+  "name": "@restatedev/cdk-support",
+  "description": "CDK TypeScript constructs for Restate.dev",
   "version": "0.1.0",
-  "bin": {
-    "restate-cdk-support": "bin/restate-cdk-support.js"
-  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc --noEmitOnError",
+    "prebundle": "rm -rf dist",
+    "postbundle": "cd dist && zip -r index.zip index.js*",
     "watch": "tsc -w",
     "test": "jest",
     "cdk": "cdk"
