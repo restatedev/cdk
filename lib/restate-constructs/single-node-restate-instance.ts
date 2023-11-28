@@ -24,6 +24,7 @@ import * as cr from "aws-cdk-lib/custom-resources";
 const RESTATE_INGRESS_PORT = 8080;
 const RESTATE_META_PORT = 9070;
 const RESTATE_DOCKER_DEFAULT_TAG = "latest";
+const ADOT_DOCKER_DEFAULT_TAG = "latest";
 
 /**
  * Represents an instance of the Restate service. This could represent a self-hosted broker, or Restate's managed
@@ -33,6 +34,20 @@ export interface RestateInstance {
   readonly invokerRole: iam.Role;
   readonly metaEndpoint: string;
   readonly registrationProviderToken: cdk.CfnOutput;
+}
+
+export interface RestateInstanceProps {
+  /** Log group for Restate service logs. */
+  logGroup: logs.LogGroup;
+
+  /** Prefix for resources created by this construct that require unique names. */
+  prefix?: string;
+
+  /** Restate Docker image tag. Defaults to `latest`. */
+  restateTag?: string;
+
+  /** Amazon Distro for Open Telemetry Docker image tag. Defaults to `latest`. */
+  adotTag?: string;
 }
 
 /**
@@ -50,7 +65,7 @@ export class SingleNodeRestateInstance extends Construct implements RestateInsta
   readonly registrationProvider: cr.Provider;
   readonly registrationProviderToken: cdk.CfnOutput;
 
-  constructor(scope: Construct, id: string, props: { prefix?: string, restateTag?: string, logGroup: logs.LogGroup }) {
+  constructor(scope: Construct, id: string, props: RestateInstanceProps) {
     super(scope, id);
 
     this.vpc = new ec2.Vpc(this, "RestateVpc", {
@@ -66,6 +81,7 @@ export class SingleNodeRestateInstance extends Construct implements RestateInsta
     props.logGroup.grantWrite(this.invokerRole);
 
     const restateTag = props.restateTag ?? RESTATE_DOCKER_DEFAULT_TAG;
+    const adotTag = props.adotTag ?? ADOT_DOCKER_DEFAULT_TAG;
     const restateInitCommands = ec2.UserData.forLinux();
     restateInitCommands.addCommands(
       "sudo yum update -y",
@@ -73,9 +89,15 @@ export class SingleNodeRestateInstance extends Construct implements RestateInsta
       "sudo systemctl enable docker.service",
       "sudo systemctl start docker.service",
       [
-        "sudo docker run --name restate --restart on-failure:10 --detach",
+        "docker run --name adot --restart unless-stopped --detach",
+        " -p 4317:4317 -p 55680:55680 -p 8889:8888",
+        ` public.ecr.aws/aws-observability/aws-otel-collector:${adotTag}`,
+      ].join(""),
+      [
+        "sudo docker run --name restate --restart unless-stopped --detach",
         " --volume /var/restate:/target --network=host",
         " -e RESTATE_OBSERVABILITY__LOG__FORMAT=Json -e RUST_LOG=info,restate_worker::partition=warn",
+        " -e RESTATE_OBSERVABILITY__TRACING__ENDPOINT=http://localhost:4317",
         ` --log-driver=awslogs --log-opt awslogs-group=${props.logGroup.logGroupName}`,
         ` ghcr.io/restatedev/restate-dist:${restateTag}`,
       ].join(""),
@@ -90,6 +112,7 @@ export class SingleNodeRestateInstance extends Construct implements RestateInsta
       role: this.invokerRole,
       userData: restateInitCommands,
     });
+    restateInstance.role.addManagedPolicy(iam.ManagedPolicy.fromAwsManagedPolicyName("AWSXrayWriteOnlyAccess"));
     this.instance = restateInstance;
 
     const restateInstanceSecurityGroup = new ec2.SecurityGroup(this, "RestateSecurityGroup", {
