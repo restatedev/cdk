@@ -36,9 +36,17 @@ export interface RestateInstance {
   readonly registrationProviderToken: cdk.CfnOutput;
 }
 
+export enum TracingMode {
+  DISABLED = "DISABLED",
+  AWS_XRAY = "AWS_XRAY",
+}
+
 export interface RestateInstanceProps {
   /** Log group for Restate service logs. */
   logGroup: logs.LogGroup;
+
+  /** Tracing mode for Restate services. Disabled by default. */
+  tracing?: TracingMode;
 
   /** Prefix for resources created by this construct that require unique names. */
   prefix?: string;
@@ -112,8 +120,13 @@ export class SingleNodeRestateInstance extends Construct implements RestateInsta
       role: this.invokerRole,
       userData: restateInitCommands,
     });
-    restateInstance.role.addManagedPolicy(iam.ManagedPolicy.fromAwsManagedPolicyName("AWSXrayWriteOnlyAccess"));
     this.instance = restateInstance;
+
+    // We start the ADOT collector regardless, and only control whether they will be published to X-Ray via instance
+    // role permissions. This way historic traces will be buffered on the host, even if tracing is disabled initially.
+    if (props.tracing === TracingMode.AWS_XRAY) {
+      restateInstance.role.addManagedPolicy(iam.ManagedPolicy.fromAwsManagedPolicyName("AWSXrayWriteOnlyAccess"));
+    }
 
     const restateInstanceSecurityGroup = new ec2.SecurityGroup(this, "RestateSecurityGroup", {
       vpc: this.vpc,
