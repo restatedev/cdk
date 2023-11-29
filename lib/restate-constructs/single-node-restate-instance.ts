@@ -107,7 +107,7 @@ export class SingleNodeRestateInstance extends Construct implements RestateInsta
         " -e RESTATE_OBSERVABILITY__LOG__FORMAT=Json -e RUST_LOG=info,restate_worker::partition=warn",
         " -e RESTATE_OBSERVABILITY__TRACING__ENDPOINT=http://localhost:4317",
         ` --log-driver=awslogs --log-opt awslogs-group=${props.logGroup.logGroupName}`,
-        ` ghcr.io/restatedev/restate-dist:${restateTag}`,
+        ` docker.io/restatedev/restate:${restateTag}`,
       ].join(""),
     );
 
