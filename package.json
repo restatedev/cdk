@@ -1,10 +1,14 @@
 {
   "name": "@restatedev/restate-cdk",
   "description": "Restate.dev CDK constructs",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "author": "Restate Developers",
   "license": "MIT",
   "email": "code@restate.dev",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/restatedev/cdk.git"
+  },
   "publishConfig": {
     "@restatedev:registry": "https://registry.npmjs.org"
   },
