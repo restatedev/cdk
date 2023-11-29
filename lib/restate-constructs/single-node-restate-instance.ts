@@ -14,12 +14,14 @@ import * as logs from "aws-cdk-lib/aws-logs";
 import * as ec2 from "aws-cdk-lib/aws-ec2";
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as elb_v2 from "aws-cdk-lib/aws-elasticloadbalancingv2";
+import { ApplicationProtocol } from "aws-cdk-lib/aws-elasticloadbalancingv2";
 import { InstanceTarget } from "aws-cdk-lib/aws-elasticloadbalancingv2-targets";
 import * as lambda_node from "aws-cdk-lib/aws-lambda-nodejs";
 import path from "node:path";
 import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as cdk from "aws-cdk-lib";
 import * as cr from "aws-cdk-lib/custom-resources";
+import * as acm from "aws-cdk-lib/aws-certificatemanager";
 
 const RESTATE_INGRESS_PORT = 8080;
 const RESTATE_META_PORT = 9070;
@@ -56,6 +58,9 @@ export interface RestateInstanceProps {
 
   /** Amazon Distro for Open Telemetry Docker image tag. Defaults to `latest`. */
   adotTag?: string;
+
+  /** Optional certificate for ingress endpoint. If unspecified, a plain HTTP listener will be created. */
+  certificate?: acm.ICertificate;
 }
 
 /**
@@ -140,17 +145,20 @@ export class SingleNodeRestateInstance extends Construct implements RestateInsta
     });
     const targetGroup = new elb_v2.ApplicationTargetGroup(this, "TargetGroup", {
       vpc: this.vpc,
+      protocol: elb_v2.ApplicationProtocol.HTTP,
       port: RESTATE_INGRESS_PORT,
       targets: [new InstanceTarget(restateInstance)],
       healthCheck: {
-        path: "/grpc.health.v1.Health/Check",
         protocol: elb_v2.Protocol.HTTP,
+        path: "/grpc.health.v1.Health/Check",
+        interval: cdk.Duration.seconds(60),
       },
     });
-    // TODO: Make this HTTPS (https://github.com/restatedev/restate-cdk-support/issues/2)
     ingressLoadBalancer.addListener("Listener", {
-      port: 80,
+      port: props.certificate ? 443 : 80,
+      protocol: props.certificate ? ApplicationProtocol.HTTPS : ApplicationProtocol.HTTP,
       defaultTargetGroups: [targetGroup],
+      certificates: props.certificate ? [elb_v2.ListenerCertificate.fromCertificateManager(props.certificate)] : [],
     });
 
     const albSecurityGroup = new ec2.SecurityGroup(this, "AlbSecurityGroup", {
@@ -181,7 +189,7 @@ export class SingleNodeRestateInstance extends Construct implements RestateInsta
       value: registrationProvider.serviceToken,
     });
 
-    this.publicIngressEndpoint = `http://${ingressLoadBalancer.loadBalancerDnsName}`;
+    this.publicIngressEndpoint = `${props.certificate ? "https" : "http"}://${ingressLoadBalancer.loadBalancerDnsName}`;
     this.privateIngressEndpoint = `http://${this.instance.instancePrivateDnsName}:${RESTATE_INGRESS_PORT}`;
     this.metaEndpoint = `http://${this.instance.instancePrivateDnsName}:${RESTATE_META_PORT}`;
   }
