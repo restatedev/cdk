@@ -92,17 +92,17 @@ export class SingleNodeRestateInstance extends Construct implements RestateInsta
     const adotTag = props.adotTag ?? ADOT_DOCKER_DEFAULT_TAG;
     const restateInitCommands = ec2.UserData.forLinux();
     restateInitCommands.addCommands(
-      "sudo yum update -y",
-      "sudo yum install -y docker",
-      "sudo systemctl enable docker.service",
-      "sudo systemctl start docker.service",
+      "yum update -y",
+      "yum install -y docker",
+      "systemctl enable docker.service",
+      "systemctl start docker.service",
       [
         "docker run --name adot --restart unless-stopped --detach",
         " -p 4317:4317 -p 55680:55680 -p 8889:8888",
         ` public.ecr.aws/aws-observability/aws-otel-collector:${adotTag}`,
       ].join(""),
       [
-        "sudo docker run --name restate --restart unless-stopped --detach",
+        "docker run --name restate --restart unless-stopped --detach",
         " --volume /var/restate:/target --network=host",
         " -e RESTATE_OBSERVABILITY__LOG__FORMAT=Json -e RUST_LOG=info,restate_worker::partition=warn",
         " -e RESTATE_OBSERVABILITY__TRACING__ENDPOINT=http://localhost:4317",
