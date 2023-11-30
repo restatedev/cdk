@@ -9,12 +9,8 @@
  * https://github.com/restatedev/sdk-typescript/blob/main/LICENSE
  */
 
-import { CloudFormationCustomResourceResponse } from "aws-lambda";
 import { Handler } from "aws-lambda/handler";
-import {
-  CloudFormationCustomResourceEvent,
-  CloudFormationCustomResourceFailedResponse,
-} from "aws-lambda/trigger/cloudformation-custom-resource";
+import { CloudFormationCustomResourceEvent } from "aws-lambda/trigger/cloudformation-custom-resource";
 import fetch from "node-fetch";
 import * as cdk from "aws-cdk-lib";
 import { GetSecretValueCommand, SecretsManagerClient } from "@aws-sdk/client-secrets-manager";
@@ -34,14 +30,14 @@ type EndpointResponse = {
   services?: { name?: string; revision?: number }[];
 };
 
+const MAX_HEALTH_CHECK_ATTEMPTS = 4;
+const MAX_REGISTRATION_ATTEMPTS = 3;
+
 /**
  * Custom Resource event handler for Restate service registration. This handler backs the custom resources created by
- * {@link RestateLambdaServiceCollection} to facilitate Lambda service handler discovery.
+ * {@link LambdaServiceRegistry} to facilitate Lambda service handler discovery.
  */
-export const handler: Handler<
-  CloudFormationCustomResourceEvent,
-  Partial<CloudFormationCustomResourceResponse>
-> = async function (event) {
+export const handler: Handler<CloudFormationCustomResourceEvent, void> = async function (event) {
   console.log({ event });
 
   if (event.RequestType === "Delete") {
@@ -52,54 +48,80 @@ export const handler: Handler<
 
     // const props = event.ResourceProperties as RegistrationProperties;
     // if (props.removalPolicy === cdk.RemovalPolicy.DESTROY) {
+    //   console.log(`De-registering service ${props.serviceLambdaArn}`);
     //   const controller = new AbortController();
     //   const id = btoa(props.serviceLambdaArn!); // TODO: we should be treating service ids as opaque
-    //   const deleteResponse = await fetch(`${props.metaEndpoint}/endpoints/${id}?force=true`,
-    //     {
-    //       signal: controller.signal,
-    //       method: "DELETE",
-    //     })
-    //     .finally(() => clearTimeout(registerCallTimeout));
+    //   const deleteCallTimeout = setTimeout(() => controller.abort("timeout"), 5_000);
+    //   const deleteResponse = await fetch(`${props.metaEndpoint}/endpoints/${id}?force=true`, {
+    //     signal: controller.signal,
+    //     method: "DELETE",
+    //   }).finally(() => clearTimeout(deleteCallTimeout));
+    //
     //   console.log(`Got delete response back: ${deleteResponse.status}`);
+    //   if (deleteResponse.status != 202) {
+    //     throw new Error(`Deleting service endpoint failed: ${deleteResponse.statusText} (${deleteResponse.status})`);
+    //   }
     // }
 
-    return {
-      Status: "SUCCESS",
-    } satisfies Partial<CloudFormationCustomResourceResponse>;
+    console.warn("De-registering services is not supported currently. Previous version will remain registered.");
+    return;
   }
 
   const props = event.ResourceProperties as RegistrationProperties;
-
-  const controller = new AbortController();
-  const healthCheckTimeout = setTimeout(() => controller.abort("timeout"), 5_000);
-  const healthCheckUrl = `${props.metaEndpoint}/health`;
   const authHeader = await createAuthHeader(props);
-  console.log(`Performing health check against: ${healthCheckUrl}`);
-  const healthResponse = await fetch(healthCheckUrl, {
-    signal: controller.signal,
-    headers: authHeader,
-  }).finally(() => clearTimeout(healthCheckTimeout));
 
-  console.log(`Got health check response back: ${healthResponse.status}`);
-  if (!(healthResponse.status >= 200 && healthResponse.status < 300)) {
-    console.error(`Restate health check failed: ${healthResponse.statusText} (${healthResponse.status})`);
-    return {
-      Reason: `Restate health check failed: ${healthResponse.statusText} (${healthResponse.status})`,
-      Status: "FAILED",
-    } satisfies Partial<CloudFormationCustomResourceFailedResponse>;
+  let attempt;
+  const controller = new AbortController();
+
+  const healthCheckUrl = `${props.metaEndpoint}/health`;
+
+  console.log(`Performing health check against: ${healthCheckUrl}`);
+  attempt = 1;
+  while (true) {
+    const healthCheckTimeout = setTimeout(() => controller.abort("timeout"), 5_000);
+    let healthResponse = undefined;
+    let errorMessage = undefined;
+    try {
+      healthResponse = await fetch(healthCheckUrl, {
+        signal: controller.signal,
+        headers: authHeader,
+      }).finally(() => clearTimeout(healthCheckTimeout));
+
+      console.log(`Got health check response back: ${healthResponse.status}`);
+      if (healthResponse.status >= 200 && healthResponse.status < 300) {
+        break;
+      }
+      console.error(
+        `Restate health check failed: ${healthResponse.statusText} (${healthResponse.status}; attempt ${attempt})`,
+      );
+    } catch (e) {
+      errorMessage = (e as Error)?.message;
+      console.error(`Restate health check failed: "${errorMessage}" (attempt ${attempt})`);
+    }
+
+    if (attempt >= MAX_HEALTH_CHECK_ATTEMPTS) {
+      console.error(`Service registration failed after ${attempt} attempts.`);
+      throw new Error(errorMessage ?? `${healthResponse?.statusText} (${healthResponse?.status})`);
+    }
+    attempt += 1;
+
+    const waitTimeMillis = 2 ** attempt * 1_000;
+    console.log(`Retrying after ${waitTimeMillis} ms...`);
+    await sleep(waitTimeMillis);
   }
 
-  let attempt = 1;
-  const registerCallTimeout = setTimeout(() => controller.abort("timeout"), 10_000);
-  const discoveryEndpointUrl = `${props.metaEndpoint}/endpoints`;
+  const endpointsUrl = `${props.metaEndpoint}/endpoints`;
   const registrationRequest = JSON.stringify({
     arn: props.serviceLambdaArn,
     assume_role_arn: props.invokeRoleArn,
   });
-  console.log(`Triggering registration at ${discoveryEndpointUrl}: ${registrationRequest} (attempt ${attempt})`);
+
+  console.log(`Triggering registration at ${endpointsUrl}: ${registrationRequest} (attempt ${attempt})`);
+  attempt = 1;
   while (true) {
     try {
-      const discoveryResponse = await fetch(discoveryEndpointUrl, {
+      const registerCallTimeout = setTimeout(() => controller.abort("timeout"), 10_000);
+      const discoveryResponse = await fetch(endpointsUrl, {
         signal: controller.signal,
         method: "POST",
         body: registrationRequest,
@@ -115,33 +137,29 @@ export const handler: Handler<
         const response = (await discoveryResponse.json()) as EndpointResponse;
 
         if (response?.services?.[0]?.name !== props.servicePath) {
-          console.error(`Service registration failed: ${discoveryResponse.statusText} (${discoveryResponse.status})`);
-          return {
-            Reason: `Restate service registration failed: name returned by service ("${response?.services?.[0]?.name})) does not match expected ("${props.servicePath}")`,
-            Status: "FAILED",
-          } satisfies Partial<CloudFormationCustomResourceFailedResponse>;
+          console.error(
+            "Restate service registration failed: service name indicated by service response" +
+              ` ("${response?.services?.[0]?.name})) does not match the expected value ("${props.servicePath}")!`,
+          );
+          break;
         }
 
-        return {
-          Data: response,
-          Status: "SUCCESS",
-        } satisfies Partial<CloudFormationCustomResourceResponse>;
+        console.log("Success!");
+        return;
       }
     } catch (e) {
-      console.log(`Service registration call failed: ${(e as Error)?.message} (attempt ${attempt})`);
+      console.error(`Service registration call failed: ${(e as Error)?.message} (attempt ${attempt})`);
     }
 
-    attempt += 1;
-    if (attempt >= 3) {
+    if (attempt >= MAX_REGISTRATION_ATTEMPTS) {
       console.error(`Service registration failed after ${attempt} attempts.`);
       break;
     }
+    attempt += 1;
+    await sleep(1_000);
   }
 
-  return {
-    Reason: `Restate service registration failed: ${healthResponse.statusText} (${healthResponse.status})`,
-    Status: "FAILED",
-  } satisfies Partial<CloudFormationCustomResourceResponse>;
+  throw new Error("Failed to register service with Restate.");
 };
 
 async function createAuthHeader(props: RegistrationProperties): Promise<Record<string, string>> {
@@ -149,7 +167,7 @@ async function createAuthHeader(props: RegistrationProperties): Promise<Record<s
     return {};
   }
 
-  console.log(`Using bearer authentication token from secret ${props.authTokenSecretArn}`)
+  console.log(`Using bearer authentication token from secret ${props.authTokenSecretArn}`);
   const ssm = new SecretsManagerClient();
   const response = await ssm.send(
     new GetSecretValueCommand({
@@ -161,4 +179,8 @@ async function createAuthHeader(props: RegistrationProperties): Promise<Record<s
   return {
     Authorization: `Bearer ${response.SecretString}`,
   };
+}
+
+async function sleep(millis: number) {
+  await new Promise((resolve) => setTimeout(resolve, millis));
 }
