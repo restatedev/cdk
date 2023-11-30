@@ -16,13 +16,10 @@ import * as iam from "aws-cdk-lib/aws-iam";
 import * as elb_v2 from "aws-cdk-lib/aws-elasticloadbalancingv2";
 import { ApplicationProtocol } from "aws-cdk-lib/aws-elasticloadbalancingv2";
 import { InstanceTarget } from "aws-cdk-lib/aws-elasticloadbalancingv2-targets";
-import * as lambda_node from "aws-cdk-lib/aws-lambda-nodejs";
-import path from "node:path";
-import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as cdk from "aws-cdk-lib";
-import * as cr from "aws-cdk-lib/custom-resources";
 import * as acm from "aws-cdk-lib/aws-certificatemanager";
 import { RestateInstance } from "./restate-instance";
+import { RegistrationProvider } from "./registration-provider";
 
 const RESTATE_INGRESS_PORT = 8080;
 const RESTATE_META_PORT = 9070;
@@ -66,7 +63,6 @@ export class SingleNodeRestateInstance extends Construct implements RestateInsta
   readonly publicIngressEndpoint: string;
   readonly privateIngressEndpoint: string;
   readonly metaEndpoint: string;
-  readonly registrationProvider: cr.Provider;
   readonly registrationProviderToken: cdk.CfnOutput;
 
   constructor(scope: Construct, id: string, props: RestateInstanceProps) {
@@ -78,9 +74,7 @@ export class SingleNodeRestateInstance extends Construct implements RestateInsta
 
     this.invokerRole = new iam.Role(this, "InstanceRole", {
       assumedBy: new iam.ServicePrincipal("ec2.amazonaws.com"),
-      managedPolicies: [
-        iam.ManagedPolicy.fromAwsManagedPolicyName("AmazonSSMManagedInstanceCore"),
-      ],
+      managedPolicies: [iam.ManagedPolicy.fromAwsManagedPolicyName("AmazonSSMManagedInstanceCore")],
     });
     props.logGroup.grantWrite(this.invokerRole);
 
@@ -157,25 +151,41 @@ export class SingleNodeRestateInstance extends Construct implements RestateInsta
       description: "ALB security group",
       allowAllOutbound: false,
     });
-    albSecurityGroup.addEgressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(RESTATE_INGRESS_PORT), "Allow outbound HTTP traffic to Restate ingress");
+    albSecurityGroup.addEgressRule(
+      ec2.Peer.anyIpv4(),
+      ec2.Port.tcp(RESTATE_INGRESS_PORT),
+      "Allow outbound HTTP traffic to Restate ingress",
+    );
     ingressLoadBalancer.addSecurityGroup(albSecurityGroup);
 
-    restateInstanceSecurityGroup.addIngressRule(albSecurityGroup, ec2.Port.tcp(RESTATE_INGRESS_PORT), "Allow traffic from ALB to Restate ingress");
+    restateInstanceSecurityGroup.addIngressRule(
+      albSecurityGroup,
+      ec2.Port.tcp(RESTATE_INGRESS_PORT),
+      "Allow traffic from ALB to Restate ingress",
+    );
 
     // These rules allow the service registration component to trigger service discovery as needed; the requests
     // originate from a VPC-bound Lambda function that backs the custom resource.
     this.vpc.privateSubnets.forEach((subnet) => {
-      restateInstanceSecurityGroup.addIngressRule(ec2.Peer.ipv4(subnet.ipv4CidrBlock), ec2.Port.tcp(RESTATE_META_PORT), "Allow traffic from the VPC to Restate meta");
+      restateInstanceSecurityGroup.addIngressRule(
+        ec2.Peer.ipv4(subnet.ipv4CidrBlock),
+        ec2.Port.tcp(RESTATE_META_PORT),
+        "Allow traffic from the VPC to Restate meta",
+      );
     });
     this.vpc.privateSubnets.forEach((subnet) => {
-      restateInstanceSecurityGroup.addIngressRule(ec2.Peer.ipv4(subnet.ipv4CidrBlock), ec2.Port.tcp(RESTATE_INGRESS_PORT), "Allow traffic from the VPC to Restate ingress");
+      restateInstanceSecurityGroup.addIngressRule(
+        ec2.Peer.ipv4(subnet.ipv4CidrBlock),
+        ec2.Port.tcp(RESTATE_INGRESS_PORT),
+        "Allow traffic from the VPC to Restate ingress",
+      );
     });
     restateInstance.addSecurityGroup(restateInstanceSecurityGroup);
 
-    const registrationProvider = this.createRegistrationProvider();
-    this.registrationProvider = registrationProvider;
+    const registrationProvider = new RegistrationProvider(this, "RegistrationProvider", { vpc: this.vpc });
     this.registrationProviderToken = new cdk.CfnOutput(this, "RegistrationProviderToken", {
-      description: "Custom resource provider service token, needed by the Restate service registry component to trigger discovery",
+      description:
+        "Custom resource provider service token, needed by the Restate service registry component to trigger discovery",
       exportName: [props.prefix, "RegistrationProviderToken"].join("-"),
       value: registrationProvider.serviceToken,
     });
@@ -183,31 +193,5 @@ export class SingleNodeRestateInstance extends Construct implements RestateInsta
     this.publicIngressEndpoint = `${props.certificate ? "https" : "http"}://${ingressLoadBalancer.loadBalancerDnsName}`;
     this.privateIngressEndpoint = `http://${this.instance.instancePrivateDnsName}:${RESTATE_INGRESS_PORT}`;
     this.metaEndpoint = `http://${this.instance.instancePrivateDnsName}:${RESTATE_META_PORT}`;
-  }
-
-  /**
-   * Creates a custom resource provider to facilitate service discovery. Note that the custom resource event handler
-   * must be able to reach the Restate instance's meta endpoint - which is why it is deployed within the same VPC.
-   */
-  private createRegistrationProvider() {
-    const registrationHandler = new lambda_node.NodejsFunction(this, "RegistrationHandler", {
-      description: "Restate custom registration handler",
-      entry: path.join(__dirname, "register-service-handler/index.js"),
-      architecture: lambda.Architecture.ARM_64,
-      runtime: lambda.Runtime.NODEJS_LATEST,
-      memorySize: 128,
-      timeout: cdk.Duration.seconds(60),
-      environment: {
-        NODE_OPTIONS: "--enable-source-maps",
-      },
-      vpc: this.vpc,
-      vpcSubnets: {
-        subnets: this.vpc.privateSubnets,
-      },
-    });
-
-    return new cr.Provider(this, "RegistrationProvider", {
-      onEventHandler: registrationHandler,
-    });
   }
 }

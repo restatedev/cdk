@@ -55,11 +55,17 @@ export class LambdaServiceRegistry extends Construct {
   constructor(scope: Construct, id: string, props: LambdaServiceRegistryProps) {
     super(scope, id);
 
+    if (Object.values(props.serviceHandlers).length == 0) {
+      throw new Error("Please specify at least one service handler.");
+    }
+
     this.serviceHandlers = props.serviceHandlers;
     this.registrationProviderToken = props.restate.registrationProviderToken.value;
   }
 
   public register(restate: RestateInstanceRef) {
+    const invokerRole = iam.Role.fromRoleArn(this, "InvokerRole", restate.invokerRoleArn);
+
     const allowInvokeFunction = new iam.Policy(this, "AllowInvokeFunction", {
       statements: [
         new iam.PolicyStatement({
@@ -71,7 +77,6 @@ export class LambdaServiceRegistry extends Construct {
       ],
     });
 
-    const invokerRole = iam.Role.fromRoleArn(this, "InvokerRole", restate.invokerRoleArn);
     invokerRole.attachInlinePolicy(allowInvokeFunction);
 
     for (const [path, handler] of Object.entries(this.serviceHandlers)) {
