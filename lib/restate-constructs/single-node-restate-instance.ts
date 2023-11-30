@@ -22,21 +22,12 @@ import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as cdk from "aws-cdk-lib";
 import * as cr from "aws-cdk-lib/custom-resources";
 import * as acm from "aws-cdk-lib/aws-certificatemanager";
+import { RestateInstance } from "./restate-instance";
 
 const RESTATE_INGRESS_PORT = 8080;
 const RESTATE_META_PORT = 9070;
 const RESTATE_DOCKER_DEFAULT_TAG = "latest";
 const ADOT_DOCKER_DEFAULT_TAG = "latest";
-
-/**
- * Represents an instance of the Restate service. This could represent a self-hosted broker, or Restate's managed
- * service.
- */
-export interface RestateInstance {
-  readonly invokerRole: iam.Role;
-  readonly metaEndpoint: string;
-  readonly registrationProviderToken: cdk.CfnOutput;
-}
 
 export enum TracingMode {
   DISABLED = "DISABLED",

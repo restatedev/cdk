@@ -11,3 +11,5 @@
 
 export * from "./lambda-service-registry";
 export * from "./single-node-restate-instance";
+export * from "./managed-restate";
+export * from "./restate-instance";
