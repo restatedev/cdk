@@ -7,7 +7,7 @@ import * as ssm from "aws-cdk-lib/aws-secretsmanager";
  * service.
  */
 export interface RestateInstance {
-  readonly invokerRole: iam.Role;
+  readonly invokerRole: iam.IRole;
   readonly metaEndpoint: string;
   readonly authToken?: ssm.ISecret;
   readonly registrationProviderToken: cdk.CfnOutput;
