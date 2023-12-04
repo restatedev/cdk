@@ -14,6 +14,7 @@ import { CloudFormationCustomResourceEvent } from "aws-lambda/trigger/cloudforma
 import fetch from "node-fetch";
 import * as cdk from "aws-cdk-lib";
 import { GetSecretValueCommand, SecretsManagerClient } from "@aws-sdk/client-secrets-manager";
+import * as https from "https";
 
 export interface RegistrationProperties {
   servicePath?: string;
@@ -32,6 +33,8 @@ type EndpointResponse = {
 
 const MAX_HEALTH_CHECK_ATTEMPTS = 4;
 const MAX_REGISTRATION_ATTEMPTS = 3;
+
+const INSECURE = true;
 
 /**
  * Custom Resource event handler for Restate service registration. This handler backs the custom resources created by
@@ -55,6 +58,7 @@ export const handler: Handler<CloudFormationCustomResourceEvent, void> = async f
     //   const deleteResponse = await fetch(`${props.metaEndpoint}/endpoints/${id}?force=true`, {
     //     signal: controller.signal,
     //     method: "DELETE",
+    //     agent: INSECURE ? new https.Agent({ rejectUnauthorized: false }) : undefined,
     //   }).finally(() => clearTimeout(deleteCallTimeout));
     //
     //   console.log(`Got delete response back: ${deleteResponse.status}`);
@@ -85,6 +89,7 @@ export const handler: Handler<CloudFormationCustomResourceEvent, void> = async f
       healthResponse = await fetch(healthCheckUrl, {
         signal: controller.signal,
         headers: authHeader,
+        agent: INSECURE ? new https.Agent({ rejectUnauthorized: false }) : undefined,
       }).finally(() => clearTimeout(healthCheckTimeout));
 
       console.log(`Got health check response back: ${healthResponse.status}`);
@@ -129,6 +134,7 @@ export const handler: Handler<CloudFormationCustomResourceEvent, void> = async f
           "Content-Type": "application/json",
           ...authHeader,
         },
+        agent: INSECURE ? new https.Agent({ rejectUnauthorized: false }) : undefined,
       }).finally(() => clearTimeout(registerCallTimeout));
 
       console.log(`Got registration response back: ${discoveryResponse.status}`);
