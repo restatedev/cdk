@@ -15,6 +15,8 @@ import * as lambda from "aws-cdk-lib/aws-lambda";
 import { Construct } from "constructs";
 import { RegistrationProperties } from "./register-service-handler";
 
+import { RestateInstance } from "./restate-instance";
+
 /**
  * A Restate RPC service path. Example: `greeter`.
  */
@@ -23,6 +25,7 @@ type RestatePath = string;
 export interface RestateInstanceRef {
   readonly metaEndpoint: string;
   readonly invokerRoleArn: string;
+  readonly authTokenSecretArn?: string;
 }
 
 /**
@@ -37,7 +40,7 @@ export type LambdaServiceRegistryProps = {
   /**
    * Custom resource provider token required for service discovery.
    */
-  registrationProviderToken: string;
+  restate: RestateInstance;
 }
 
 /**
@@ -52,11 +55,17 @@ export class LambdaServiceRegistry extends Construct {
   constructor(scope: Construct, id: string, props: LambdaServiceRegistryProps) {
     super(scope, id);
 
+    if (Object.values(props.serviceHandlers).length == 0) {
+      throw new Error("Please specify at least one service handler.");
+    }
+
     this.serviceHandlers = props.serviceHandlers;
-    this.registrationProviderToken = props.registrationProviderToken;
+    this.registrationProviderToken = props.restate.registrationProviderToken.value;
   }
 
   public register(restate: RestateInstanceRef) {
+    const invokerRole = iam.Role.fromRoleArn(this, "InvokerRole", restate.invokerRoleArn);
+
     const allowInvokeFunction = new iam.Policy(this, "AllowInvokeFunction", {
       statements: [
         new iam.PolicyStatement({
@@ -68,7 +77,6 @@ export class LambdaServiceRegistry extends Construct {
       ],
     });
 
-    const invokerRole = iam.Role.fromRoleArn(this, "InvokerRole", restate.invokerRoleArn);
     invokerRole.attachInlinePolicy(allowInvokeFunction);
 
     for (const [path, handler] of Object.entries(this.serviceHandlers)) {
@@ -100,7 +108,7 @@ class RestateServiceRegistrar extends Construct {
                   path: RestatePath,
                   handler: lambda.Function
                 },
-                serviceToken: string
+                serviceToken: string,
               },
   ) {
     super(scope, id);
@@ -111,8 +119,10 @@ class RestateServiceRegistrar extends Construct {
       properties: {
         servicePath: props.service.path,
         metaEndpoint: props.restate.metaEndpoint,
+        authTokenSecretArn: props.restate.authTokenSecretArn,
         serviceLambdaArn: props.service.handler.currentVersion.functionArn,
-        removalPolicy: cdk.RemovalPolicy.DESTROY,
+        invokeRoleArn: props.restate.invokerRoleArn,
+        removalPolicy: cdk.RemovalPolicy.RETAIN,
       } satisfies RegistrationProperties,
     });
   }
