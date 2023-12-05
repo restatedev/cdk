@@ -17,6 +17,8 @@ import * as cdk from "aws-cdk-lib";
 import { RestateInstance } from "./restate-instance";
 import { RegistrationProvider } from "./registration-provider";
 
+const PUBLIC_INGRESS_PORT = 443;
+const PUBLIC_META_PORT = 9073;
 const RESTATE_INGRESS_PORT = 8080;
 const RESTATE_META_PORT = 9070;
 const RESTATE_DOCKER_DEFAULT_TAG = "latest";
@@ -79,7 +81,8 @@ export class SingleNodeRestateInstance extends Construct implements RestateInsta
     const restateInitCommands = ec2.UserData.forLinux();
     restateInitCommands.addCommands(
       "yum update -y",
-      "yum install -y docker",
+      "yum install -y docker nginx",
+
       "systemctl enable docker.service",
       "systemctl start docker.service",
       [
@@ -95,6 +98,16 @@ export class SingleNodeRestateInstance extends Construct implements RestateInsta
         ` --log-driver=awslogs --log-opt awslogs-group=${props.logGroup.logGroupName}`,
         ` docker.io/restatedev/restate:${restateTag}`,
       ].join(""),
+
+      "mkdir -p /etc/pki/private",
+      [
+        "openssl req -new -x509 -nodes -sha256 -days 365 -extensions v3_ca",
+        " -subj '/C=DE/ST=Berlin/L=Berlin/O=restate.dev/OU=demo/CN=restate.example.com'",
+        " -newkey rsa:2048 -keyout /etc/pki/private/restate-selfsigned.key -out /etc/pki/private/restate-selfsigned.crt",
+      ].join(""),
+      ["cat << EOF > /etc/nginx/conf.d/restate-ingress.conf", NGINX_REVERSE_PROXY_CONFIG, "EOF"].join("\n"),
+      "systemctl enable nginx",
+      "systemctl start nginx",
     );
 
     const restateInstance = new ec2.Instance(this, "Host", {
@@ -124,12 +137,12 @@ export class SingleNodeRestateInstance extends Construct implements RestateInsta
 
     restateInstanceSecurityGroup.addIngressRule(
       ec2.Peer.anyIpv4(),
-      ec2.Port.tcp(RESTATE_INGRESS_PORT),
+      ec2.Port.tcp(443),
       "Allow traffic from anywhere to Restate ingress",
     );
     restateInstanceSecurityGroup.addIngressRule(
       ec2.Peer.anyIpv4(),
-      ec2.Port.tcp(RESTATE_META_PORT),
+      ec2.Port.tcp(9073),
       "Allow traffic from anywhere to Restate meta",
     );
 
@@ -141,7 +154,47 @@ export class SingleNodeRestateInstance extends Construct implements RestateInsta
       value: registrationProvider.serviceToken,
     });
 
-    this.ingressEndpoint = `http://${restateInstance.instancePublicDnsName}:${RESTATE_INGRESS_PORT}`;
-    this.metaEndpoint = `http://${restateInstance.instancePublicDnsName}:${RESTATE_META_PORT}`;
+    this.ingressEndpoint = `https://${restateInstance.instancePublicDnsName}${
+      PUBLIC_INGRESS_PORT == 443 ? "" : `:${PUBLIC_INGRESS_PORT}`
+    }`;
+    this.metaEndpoint = `https://${restateInstance.instancePublicDnsName}:${PUBLIC_META_PORT}`;
   }
 }
+
+const NGINX_REVERSE_PROXY_CONFIG = [
+  "server {",
+  "  listen 443 ssl http2;",
+  "  listen [::]:443 ssl http2;",
+  "  server_name _;",
+  "  root /usr/share/nginx/html;",
+  "",
+  '  ssl_certificate "/etc/pki/private/restate-selfsigned.crt";',
+  '  ssl_certificate_key "/etc/pki/private/restate-selfsigned.key";',
+  "  ssl_session_cache shared:SSL:1m;",
+  "  ssl_session_timeout 10m;",
+  "  ssl_ciphers PROFILE=SYSTEM;",
+  "  ssl_prefer_server_ciphers on;",
+  "",
+  "  location / {",
+  `    proxy_pass http://localhost:${RESTATE_INGRESS_PORT};`,
+  "  }",
+  "}",
+  "",
+  "server {",
+  "  listen 9073 ssl http2;",
+  "  listen [::]:9073 ssl http2;",
+  "  server_name _;",
+  "  root /usr/share/nginx/html;",
+  "",
+  '  ssl_certificate "/etc/pki/private/restate-selfsigned.crt";',
+  '  ssl_certificate_key "/etc/pki/private/restate-selfsigned.key";',
+  "  ssl_session_cache shared:SSL:1m;",
+  "  ssl_session_timeout 10m;",
+  "  ssl_ciphers PROFILE=SYSTEM;",
+  "  ssl_prefer_server_ciphers on;",
+  "",
+  "  location / {",
+  `    proxy_pass http://localhost:${RESTATE_META_PORT};`,
+  "  }",
+  "}",
+].join("\n");
