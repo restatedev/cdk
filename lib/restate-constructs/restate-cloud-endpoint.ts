@@ -36,7 +36,7 @@ export interface ManagedRestateProps {
  * registry elsewhere, and creates the role assumed by the cluster. An appropriate trust policy will be added to this
  * role that allows Restate to assume it from outside the deployment AWS account.
  */
-export class ManagedRestate extends Construct implements RestateInstance {
+export class RestateCloudEndpoint extends Construct implements RestateInstance {
   readonly invokerRole: iam.Role;
   readonly ingressEndpoint: string;
   readonly metaEndpoint: string;
