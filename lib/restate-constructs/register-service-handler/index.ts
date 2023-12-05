@@ -31,7 +31,7 @@ type EndpointResponse = {
   services?: { name?: string; revision?: number }[];
 };
 
-const MAX_HEALTH_CHECK_ATTEMPTS = 4;
+const MAX_HEALTH_CHECK_ATTEMPTS = 3;
 const MAX_REGISTRATION_ATTEMPTS = 3;
 
 const INSECURE = true;
@@ -104,8 +104,8 @@ export const handler: Handler<CloudFormationCustomResourceEvent, void> = async f
       console.error(`Restate health check failed: "${errorMessage}" (attempt ${attempt})`);
     }
 
-    if (attempt >= MAX_HEALTH_CHECK_ATTEMPTS) {
-      console.error(`Service registration failed after ${attempt} attempts.`);
+    if (attempt > MAX_HEALTH_CHECK_ATTEMPTS) {
+      console.error(`Meta health check still failing after ${attempt} attempts.`);
       throw new Error(errorMessage ?? `${healthResponse?.statusText} (${healthResponse?.status})`);
     }
     attempt += 1;
@@ -122,7 +122,7 @@ export const handler: Handler<CloudFormationCustomResourceEvent, void> = async f
   });
 
   let failureReason;
-  console.log(`Triggering registration at ${endpointsUrl}: ${registrationRequest} (attempt ${attempt})`);
+  console.log(`Triggering registration at ${endpointsUrl}: ${registrationRequest}`);
   attempt = 1;
   while (true) {
     try {
@@ -158,12 +158,14 @@ export const handler: Handler<CloudFormationCustomResourceEvent, void> = async f
       console.error(`Service registration call failed: ${(e as Error)?.message} (attempt ${attempt})`);
     }
 
-    if (attempt >= MAX_REGISTRATION_ATTEMPTS) {
+    if (attempt > MAX_REGISTRATION_ATTEMPTS) {
       console.error(`Service registration failed after ${attempt} attempts.`);
       break;
     }
     attempt += 1;
-    await sleep(1_000);
+    const waitTimeMillis = 2_000 + 2 ** attempt * 1_000; // 3s -> 6s -> 10s
+    console.log(`Retrying registration after ${waitTimeMillis} ms...`);
+    await sleep(waitTimeMillis);
   }
 
   throw new Error(failureReason ?? "Restate service registration failed. Please see logs for details.");
