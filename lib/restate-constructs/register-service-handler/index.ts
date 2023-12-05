@@ -121,6 +121,7 @@ export const handler: Handler<CloudFormationCustomResourceEvent, void> = async f
     assume_role_arn: props.invokeRoleArn,
   });
 
+  let failureReason;
   console.log(`Triggering registration at ${endpointsUrl}: ${registrationRequest} (attempt ${attempt})`);
   attempt = 1;
   while (true) {
@@ -143,11 +144,11 @@ export const handler: Handler<CloudFormationCustomResourceEvent, void> = async f
         const response = (await discoveryResponse.json()) as EndpointResponse;
 
         if (response?.services?.[0]?.name !== props.servicePath) {
-          console.error(
+          failureReason =
             "Restate service registration failed: service name indicated by service response" +
-              ` ("${response?.services?.[0]?.name})) does not match the expected value ("${props.servicePath}")!`,
-          );
-          break;
+            ` ("${response?.services?.[0]?.name})) does not match the expected value ("${props.servicePath}")!`;
+          console.error(failureReason);
+          break; // don't throw immediately - let retry loop decide whether to abort
         }
 
         console.log("Success!");
@@ -165,7 +166,7 @@ export const handler: Handler<CloudFormationCustomResourceEvent, void> = async f
     await sleep(1_000);
   }
 
-  throw new Error("Failed to register service with Restate.");
+  throw new Error(failureReason ?? "Restate service registration failed. Please see logs for details.");
 };
 
 async function createAuthHeader(props: RegistrationProperties): Promise<Record<string, string>> {
