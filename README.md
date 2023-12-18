@@ -5,7 +5,7 @@
 # Restate CDK support
 
 AWS Cloud Development Kit (CDK) construct library for deploying [Restate](https://restate.dev) and Restate services on
-AWS. This library helps you when deploying Restate services to AWS Lambda as well as for managing a self-hosted Restate
+AWS. This library helps you when deploying Restate services to AWS Lambda as well as for managing self-hosted Restate
 deployments on your own infrastructure. For more information on CDK, please
 see [Getting started with the AWS CDK](https://docs.aws.amazon.com/cdk/v2/guide/getting_started.html).
 
