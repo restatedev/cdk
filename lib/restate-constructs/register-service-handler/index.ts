@@ -55,7 +55,7 @@ export const handler: Handler<CloudFormationCustomResourceEvent, void> = async f
     //   const controller = new AbortController();
     //   const id = btoa(props.serviceLambdaArn!); // TODO: we should be treating service ids as opaque
     //   const deleteCallTimeout = setTimeout(() => controller.abort("timeout"), 5_000);
-    //   const deleteResponse = await fetch(`${props.metaEndpoint}/endpoints/${id}?force=true`, {
+    //   const deleteResponse = await fetch(`${props.metaEndpoint}/deployments/${id}?force=true`, {
     //     signal: controller.signal,
     //     method: "DELETE",
     //     agent: INSECURE ? new https.Agent({ rejectUnauthorized: false }) : undefined,
@@ -115,19 +115,19 @@ export const handler: Handler<CloudFormationCustomResourceEvent, void> = async f
     await sleep(waitTimeMillis);
   }
 
-  const endpointsUrl = `${props.metaEndpoint}/endpoints`;
+  const deploymentsUrl = `${props.metaEndpoint}/deployments`;
   const registrationRequest = JSON.stringify({
     arn: props.serviceLambdaArn,
     assume_role_arn: props.invokeRoleArn,
   });
 
   let failureReason;
-  console.log(`Triggering registration at ${endpointsUrl}: ${registrationRequest}`);
+  console.log(`Triggering registration at ${deploymentsUrl}: ${registrationRequest}`);
   attempt = 1;
   while (true) {
     try {
       const registerCallTimeout = setTimeout(() => controller.abort("timeout"), 10_000);
-      const discoveryResponse = await fetch(endpointsUrl, {
+      const discoveryResponse = await fetch(deploymentsUrl, {
         signal: controller.signal,
         method: "POST",
         body: registrationRequest,
