@@ -30,7 +30,7 @@ type RegisterDeploymentResponse = {
   services?: { name?: string; revision?: number }[];
 };
 
-const MAX_HEALTH_CHECK_ATTEMPTS = 3;
+const MAX_HEALTH_CHECK_ATTEMPTS = 5; // This is intentionally quite long to allow some time for first-run EC2 and Docker boot up
 const MAX_REGISTRATION_ATTEMPTS = 3;
 
 const INSECURE = true;
@@ -111,7 +111,7 @@ export const handler: Handler<CloudFormationCustomResourceEvent, void> = async f
     }
     attempt += 1;
 
-    const waitTimeMillis = 2 ** attempt * 1_000;
+    const waitTimeMillis = 2_000 + 2 ** attempt * 1_000; // 3s -> 6s -> 10s -> 18s -> 34s
     console.log(`Retrying after ${waitTimeMillis} ms...`);
     await sleep(waitTimeMillis);
   }
