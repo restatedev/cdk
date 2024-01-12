@@ -35,13 +35,13 @@ const MAX_REGISTRATION_ATTEMPTS = 3;
 
 const INSECURE = true;
 
-const DEPLOYMENTS_PATH = "endpoints" // TODO: update to "deployments" for 0.7.0
+const DEPLOYMENTS_PATH = "deployments";
 
 /**
  * Custom Resource event handler for Restate service registration. This handler backs the custom resources created by
  * {@link LambdaServiceRegistry} to facilitate Lambda service handler discovery.
  */
-export const handler: Handler<CloudFormationCustomResourceEvent, void> = async function (event) {
+export const handler: Handler<CloudFormationCustomResourceEvent, void> = async function(event) {
   console.log({ event });
 
   if (event.RequestType === "Delete") {
