@@ -15,7 +15,7 @@ import * as lambda from "aws-cdk-lib/aws-lambda";
 import { Construct } from "constructs";
 import { RegistrationProperties } from "./register-service-handler";
 
-import { RestateInstance } from "./restate-instance";
+import { RestateEnvironment } from "./restate-environment";
 
 /**
  * A Restate RPC service path. Example: `greeter`.
@@ -23,7 +23,7 @@ import { RestateInstance } from "./restate-instance";
 type RestatePath = string;
 
 export interface RestateInstanceRef {
-  readonly metaEndpoint: string;
+  readonly adminUrl: string;
   readonly invokerRoleArn: string;
   readonly authTokenSecretArn?: string;
 }
@@ -40,7 +40,7 @@ export type LambdaServiceRegistryProps = {
   /**
    * Custom resource provider token required for service discovery.
    */
-  restate: RestateInstance;
+  restate: RestateEnvironment;
 }
 
 /**
@@ -118,7 +118,7 @@ class RestateServiceRegistrar extends Construct {
       resourceType: "Custom::RestateServiceRegistrar",
       properties: {
         servicePath: props.service.path,
-        metaEndpoint: props.restate.metaEndpoint,
+        adminUrl: props.restate.adminUrl,
         authTokenSecretArn: props.restate.authTokenSecretArn,
         serviceLambdaArn: props.service.handler.currentVersion.functionArn,
         invokeRoleArn: props.restate.invokerRoleArn,

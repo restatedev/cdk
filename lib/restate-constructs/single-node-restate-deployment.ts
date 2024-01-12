@@ -14,13 +14,13 @@ import * as logs from "aws-cdk-lib/aws-logs";
 import * as ec2 from "aws-cdk-lib/aws-ec2";
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as cdk from "aws-cdk-lib";
-import { RestateInstance } from "./restate-instance";
+import { RestateEnvironment } from "./restate-environment";
 import { RegistrationProvider } from "./registration-provider";
 
 const PUBLIC_INGRESS_PORT = 443;
-const PUBLIC_META_PORT = 9073;
+const PUBLIC_ADMIN_PORT = 9073;
 const RESTATE_INGRESS_PORT = 8080;
-const RESTATE_META_PORT = 9070;
+const RESTATE_ADMIN_PORT = 9070;
 const RESTATE_DOCKER_DEFAULT_TAG = "latest";
 const ADOT_DOCKER_DEFAULT_TAG = "latest";
 
@@ -52,13 +52,13 @@ export interface RestateInstanceProps {
  * in a dedicated VPC (unless one is provided). EC2 instance will be allocated
  * a public IP address.
  */
-export class SingleNodeRestateInstance extends Construct implements RestateInstance {
+export class SingleNodeRestateDeployment extends Construct implements RestateEnvironment {
   readonly instance: ec2.Instance;
   readonly invokerRole: iam.IRole;
   readonly vpc: ec2.Vpc;
 
-  readonly ingressEndpoint: string;
-  readonly metaEndpoint: string;
+  readonly ingressUrl: string;
+  readonly adminUrl: string;
   readonly registrationProviderToken: cdk.CfnOutput;
 
   constructor(scope: Construct, id: string, props: RestateInstanceProps) {
@@ -138,12 +138,12 @@ export class SingleNodeRestateInstance extends Construct implements RestateInsta
     restateInstanceSecurityGroup.addIngressRule(
       ec2.Peer.anyIpv4(),
       ec2.Port.tcp(443),
-      "Allow traffic from anywhere to Restate ingress",
+      "Allow traffic from anywhere to Restate ingress port",
     );
     restateInstanceSecurityGroup.addIngressRule(
       ec2.Peer.anyIpv4(),
       ec2.Port.tcp(9073),
-      "Allow traffic from anywhere to Restate meta",
+      "Allow traffic from anywhere to Restate admin port",
     );
 
     const registrationProvider = new RegistrationProvider(this, "RegistrationProvider", {});
@@ -154,10 +154,10 @@ export class SingleNodeRestateInstance extends Construct implements RestateInsta
       value: registrationProvider.serviceToken,
     });
 
-    this.ingressEndpoint = `https://${restateInstance.instancePublicDnsName}${
+    this.ingressUrl = `https://${restateInstance.instancePublicDnsName}${
       PUBLIC_INGRESS_PORT == 443 ? "" : `:${PUBLIC_INGRESS_PORT}`
     }`;
-    this.metaEndpoint = `https://${restateInstance.instancePublicDnsName}:${PUBLIC_META_PORT}`;
+    this.adminUrl = `https://${restateInstance.instancePublicDnsName}:${PUBLIC_ADMIN_PORT}`;
   }
 }
 
@@ -194,7 +194,7 @@ const NGINX_REVERSE_PROXY_CONFIG = [
   "  ssl_prefer_server_ciphers on;",
   "",
   "  location / {",
-  `    proxy_pass http://localhost:${RESTATE_META_PORT};`,
+  `    proxy_pass http://localhost:${RESTATE_ADMIN_PORT};`,
   "  }",
   "}",
 ].join("\n");

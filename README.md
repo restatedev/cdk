@@ -15,9 +15,9 @@ see [Getting started with the AWS CDK](https://docs.aws.amazon.com/cdk/v2/guide/
 - [`LambdaServiceRegistry`](./lib/restate-constructs/lambda-service-registry.ts) - A collection of Lambda-deployed
   Restate services, this construct automatically registers the latest function version as a new deployment revision in a
   Restate instance
-- [`SingleNodeRestateInstance`](./lib/restate-constructs/single-node-restate-instance.ts) - Deploys a self-hosted
+- [`SingleNodeRestateInstance`](./lib/restate-constructs/single-node-restate-deployment.ts) - Deploys a self-hosted
   Restate instance on EC2; note this is a single-node deployment targeted at development and testing
-- [`RestateCloudEndpoint`](./lib/restate-constructs/restate-cloud-endpoint.ts) - A Restate Cloud instance
+- [`RestateCloudEndpoint`](./lib/restate-constructs/restate-cloud-environment.ts) - A Restate Cloud instance
 
 For a more detailed overview, please see the [Restate CDK documentation](https://docs.restate.dev/services/deployment/cdk).
 

@@ -3,12 +3,12 @@ import * as cdk from "aws-cdk-lib";
 import * as ssm from "aws-cdk-lib/aws-secretsmanager";
 
 /**
- * Represents an instance of the Restate service. This could represent a self-hosted broker, or Restate's managed
- * service.
+ * A Restate environment is a distinct deployment target. These could be an isolated environment in Restate Cloud, or
+ * a self-hosted deployment.
  */
-export interface RestateInstance {
+export interface RestateEnvironment {
   readonly invokerRole: iam.IRole;
-  readonly metaEndpoint: string;
+  readonly adminUrl: string;
   readonly authToken?: ssm.ISecret;
   readonly registrationProviderToken: cdk.CfnOutput;
 }

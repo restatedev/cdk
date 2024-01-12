@@ -18,15 +18,14 @@ import * as https from "https";
 
 export interface RegistrationProperties {
   servicePath?: string;
-  metaEndpoint?: string;
-  serviceEndpoint?: string;
+  adminUrl?: string;
   serviceLambdaArn?: string;
   invokeRoleArn?: string;
   removalPolicy?: cdk.RemovalPolicy;
   authTokenSecretArn?: string;
 }
 
-type EndpointResponse = {
+type RegisterDeploymentResponse = {
   id?: string;
   services?: { name?: string; revision?: number }[];
 };
@@ -35,6 +34,8 @@ const MAX_HEALTH_CHECK_ATTEMPTS = 3;
 const MAX_REGISTRATION_ATTEMPTS = 3;
 
 const INSECURE = true;
+
+const DEPLOYMENTS_PATH = "endpoints" // TODO: update to "deployments" for 0.7.0
 
 /**
  * Custom Resource event handler for Restate service registration. This handler backs the custom resources created by
@@ -55,7 +56,7 @@ export const handler: Handler<CloudFormationCustomResourceEvent, void> = async f
     //   const controller = new AbortController();
     //   const id = btoa(props.serviceLambdaArn!); // TODO: we should be treating service ids as opaque
     //   const deleteCallTimeout = setTimeout(() => controller.abort("timeout"), 5_000);
-    //   const deleteResponse = await fetch(`${props.metaEndpoint}/endpoints/${id}?force=true`, {
+    //   const deleteResponse = await fetch(`${props.adminUrl}/${DEPLOYMENTS_PATH}/${id}?force=true`, {
     //     signal: controller.signal,
     //     method: "DELETE",
     //     agent: INSECURE ? new https.Agent({ rejectUnauthorized: false }) : undefined,
@@ -63,7 +64,7 @@ export const handler: Handler<CloudFormationCustomResourceEvent, void> = async f
     //
     //   console.log(`Got delete response back: ${deleteResponse.status}`);
     //   if (deleteResponse.status != 202) {
-    //     throw new Error(`Deleting service endpoint failed: ${deleteResponse.statusText} (${deleteResponse.status})`);
+    //     throw new Error(`Removing service deployment failed: ${deleteResponse.statusText} (${deleteResponse.status})`);
     //   }
     // }
 
@@ -77,7 +78,7 @@ export const handler: Handler<CloudFormationCustomResourceEvent, void> = async f
   let attempt;
   const controller = new AbortController();
 
-  const healthCheckUrl = `${props.metaEndpoint}/health`;
+  const healthCheckUrl = `${props.adminUrl}/health`;
 
   console.log(`Performing health check against: ${healthCheckUrl}`);
   attempt = 1;
@@ -105,7 +106,7 @@ export const handler: Handler<CloudFormationCustomResourceEvent, void> = async f
     }
 
     if (attempt > MAX_HEALTH_CHECK_ATTEMPTS) {
-      console.error(`Meta health check still failing after ${attempt} attempts.`);
+      console.error(`Admin service health check failing after ${attempt} attempts.`);
       throw new Error(errorMessage ?? `${healthResponse?.statusText} (${healthResponse?.status})`);
     }
     attempt += 1;
@@ -115,19 +116,19 @@ export const handler: Handler<CloudFormationCustomResourceEvent, void> = async f
     await sleep(waitTimeMillis);
   }
 
-  const endpointsUrl = `${props.metaEndpoint}/endpoints`;
+  const deploymentsUrl = `${props.adminUrl}/${DEPLOYMENTS_PATH}`;
   const registrationRequest = JSON.stringify({
     arn: props.serviceLambdaArn,
     assume_role_arn: props.invokeRoleArn,
   });
 
   let failureReason;
-  console.log(`Triggering registration at ${endpointsUrl}: ${registrationRequest}`);
+  console.log(`Triggering registration at ${deploymentsUrl}: ${registrationRequest}`);
   attempt = 1;
   while (true) {
     try {
       const registerCallTimeout = setTimeout(() => controller.abort("timeout"), 10_000);
-      const discoveryResponse = await fetch(endpointsUrl, {
+      const registerDeploymentResponse = await fetch(deploymentsUrl, {
         signal: controller.signal,
         method: "POST",
         body: registrationRequest,
@@ -138,10 +139,10 @@ export const handler: Handler<CloudFormationCustomResourceEvent, void> = async f
         agent: INSECURE ? new https.Agent({ rejectUnauthorized: false }) : undefined,
       }).finally(() => clearTimeout(registerCallTimeout));
 
-      console.log(`Got registration response back: ${discoveryResponse.status}`);
+      console.log(`Got registration response back: ${registerDeploymentResponse.status}`);
 
-      if (discoveryResponse.status >= 200 && discoveryResponse.status < 300) {
-        const response = (await discoveryResponse.json()) as EndpointResponse;
+      if (registerDeploymentResponse.status >= 200 && registerDeploymentResponse.status < 300) {
+        const response = (await registerDeploymentResponse.json()) as RegisterDeploymentResponse;
 
         if (response?.services?.[0]?.name !== props.servicePath) {
           failureReason =

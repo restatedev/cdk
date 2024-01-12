@@ -11,6 +11,6 @@
 
 export * from "./lambda-service-registry";
 export * from "./registration-provider";
-export * from "./restate-cloud-endpoint";
-export * from "./restate-instance";
-export * from "./single-node-restate-instance";
+export * from "./restate-cloud-environment";
+export * from "./restate-environment";
+export * from "./single-node-restate-deployment";
