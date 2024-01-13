@@ -42,7 +42,7 @@ export type LambdaServiceRegistryProps = {
  * construct creates a custom resource which will trigger Restate service discovery on handler function changes.
  */
 export class LambdaServiceRegistry extends Construct {
-  private readonly registrationProviderToken: string;
+  private readonly registrationProviderToken: cdk.CfnOutput;
   private readonly serviceHandlers: Record<RestatePath, lambda.Function>;
 
   constructor(scope: Construct, id: string, props: LambdaServiceRegistryProps) {
@@ -53,7 +53,7 @@ export class LambdaServiceRegistry extends Construct {
     }
 
     this.serviceHandlers = props.handlers;
-    this.registrationProviderToken = props.environment.registrationProviderToken.value;
+    this.registrationProviderToken = props.environment.registrationProviderToken;
     this.registerServices(props.environment);
   }
 
@@ -89,7 +89,7 @@ export class LambdaServiceRegistry extends Construct {
     const registrar = new RestateServiceRegistrar(this, service.handler.node.id + "Discovery", {
       environment: restate,
       service,
-      serviceToken: this.registrationProviderToken,
+      serviceToken: this.registrationProviderToken.value,
     });
 
     // CloudFormation doesn't know that Restate depends on this role to call services; we must ensure that Lambda

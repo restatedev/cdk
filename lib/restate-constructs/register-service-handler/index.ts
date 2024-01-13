@@ -15,6 +15,7 @@ import fetch from "node-fetch";
 import * as cdk from "aws-cdk-lib";
 import { GetSecretValueCommand, SecretsManagerClient } from "@aws-sdk/client-secrets-manager";
 import * as https from "https";
+import { randomInt } from "crypto";
 
 export interface RegistrationProperties {
   servicePath?: string;
@@ -36,6 +37,7 @@ const MAX_REGISTRATION_ATTEMPTS = 3;
 const INSECURE = true;
 
 const DEPLOYMENTS_PATH = "deployments";
+const DEPLOYMENTS_PATH_LEGACY = "endpoints"; // temporarily fall back for legacy clusters
 
 /**
  * Custom Resource event handler for Restate service registration. This handler backs the custom resources created by
@@ -105,18 +107,18 @@ export const handler: Handler<CloudFormationCustomResourceEvent, void> = async f
       console.error(`Restate health check failed: "${errorMessage}" (attempt ${attempt})`);
     }
 
-    if (attempt > MAX_HEALTH_CHECK_ATTEMPTS) {
+    if (attempt >= MAX_HEALTH_CHECK_ATTEMPTS) {
       console.error(`Admin service health check failing after ${attempt} attempts.`);
       throw new Error(errorMessage ?? `${healthResponse?.statusText} (${healthResponse?.status})`);
     }
     attempt += 1;
 
-    const waitTimeMillis = 2_000 + 2 ** attempt * 1_000; // 3s -> 6s -> 10s -> 18s -> 34s
+    const waitTimeMillis = randomInt(2_000) + 2 ** attempt * 1_000; // 3s -> 6s -> 10s -> 18s -> 34s
     console.log(`Retrying after ${waitTimeMillis} ms...`);
     await sleep(waitTimeMillis);
   }
 
-  const deploymentsUrl = `${props.adminUrl}/${DEPLOYMENTS_PATH}`;
+  let deploymentsUrl = `${props.adminUrl}/${DEPLOYMENTS_PATH}`;
   const registrationRequest = JSON.stringify({
     arn: props.serviceLambdaArn,
     assume_role_arn: props.invokeRoleArn,
@@ -141,6 +143,11 @@ export const handler: Handler<CloudFormationCustomResourceEvent, void> = async f
 
       console.log(`Got registration response back: ${registerDeploymentResponse.status}`);
 
+      if (registerDeploymentResponse.status == 404 && attempt == 1) {
+        deploymentsUrl = `${props.adminUrl}/${DEPLOYMENTS_PATH_LEGACY}`;
+        console.log(`Got 404, falling back to <0.7.0 legacy endpoint registration at: ${deploymentsUrl}`);
+      }
+
       if (registerDeploymentResponse.status >= 200 && registerDeploymentResponse.status < 300) {
         const response = (await registerDeploymentResponse.json()) as RegisterDeploymentResponse;
 
@@ -157,14 +164,15 @@ export const handler: Handler<CloudFormationCustomResourceEvent, void> = async f
       }
     } catch (e) {
       console.error(`Service registration call failed: ${(e as Error)?.message} (attempt ${attempt})`);
+      failureReason = `Restate service registration failed: ${(e as Error)?.message}`;
     }
 
-    if (attempt > MAX_REGISTRATION_ATTEMPTS) {
+    if (attempt >= MAX_REGISTRATION_ATTEMPTS) {
       console.error(`Service registration failed after ${attempt} attempts.`);
       break;
     }
     attempt += 1;
-    const waitTimeMillis = 2_000 + 2 ** attempt * 1_000; // 3s -> 6s -> 10s
+    const waitTimeMillis = randomInt(2_000) + 2 ** attempt * 1_000; // 3s -> 6s -> 10s
     console.log(`Retrying registration after ${waitTimeMillis} ms...`);
     await sleep(waitTimeMillis);
   }
