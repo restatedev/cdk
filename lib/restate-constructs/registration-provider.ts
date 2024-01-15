@@ -18,7 +18,7 @@ import * as cdk from "aws-cdk-lib";
 import * as cr from "aws-cdk-lib/custom-resources";
 import * as ec2 from "aws-cdk-lib/aws-ec2";
 
-const DEFAULT_TIMEOUT = cdk.Duration.seconds(120);
+const DEFAULT_TIMEOUT = cdk.Duration.seconds(180);
 
 export class RegistrationProvider extends Construct {
   readonly serviceToken: string;

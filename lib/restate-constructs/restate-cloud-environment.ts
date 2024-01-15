@@ -13,47 +13,48 @@ import { Construct } from "constructs";
 import * as cdk from "aws-cdk-lib";
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as ssm from "aws-cdk-lib/aws-secretsmanager";
-import { RestateInstance } from "./restate-instance";
+import { RestateEnvironment } from "./restate-environment";
 import { RegistrationProvider } from "./registration-provider";
 
 const RESTATE_INGRESS_PORT = 8080;
-const RESTATE_META_PORT = 9070;
+const RESTATE_ADMIN_PORT = 9070;
 
-export interface ManagedRestateProps {
+export interface RestateCloudEnvironmentProps {
   /** Prefix for resources created by this construct that require unique names. */
   prefix?: string;
 
   /** ID of the Restate service cluster to which this service will be registered. */
   clusterId: string;
 
-  /** Auth token to use with Restate cluster. Used to authenticate access to the meta endpoint for registration. */
+  /** Auth token for Restate environment. Used with the admin service for service deployment registration. */
   authTokenSecretArn: string;
 }
 
 /**
- * Models a Restate managed service cluster provided to the application. In the case of a managed service, this
- * construct only creates an appropriately configured registration provider custom component for use by the service
- * registry elsewhere, and creates the role assumed by the cluster. An appropriate trust policy will be added to this
- * role that allows Restate to assume it from outside the deployment AWS account.
+ * Restate environment hosted on Restate Cloud. This construct manages the role in the deployment environment that
+ * Restate Cloud assumes to call registered services, and provides the service registration helper for Lambda-based
+ * handlers. An appropriate trust policy will be added to this role that allows Restate to assume it from outside the
+ * deployment AWS account.
  */
-export class RestateCloudEndpoint extends Construct implements RestateInstance {
+export class RestateCloudEnvironment extends Construct implements RestateEnvironment {
   readonly invokerRole: iam.Role;
-  readonly ingressEndpoint: string;
-  readonly metaEndpoint: string;
+  readonly ingressUrl: string;
+  readonly adminUrl: string;
   readonly authToken: ssm.ISecret;
   readonly registrationProviderToken: cdk.CfnOutput;
 
-  constructor(scope: Construct, id: string, props: ManagedRestateProps) {
+  constructor(scope: Construct, id: string, props: RestateCloudEnvironmentProps) {
     super(scope, id);
 
-    this.invokerRole = new iam.Role(this, "ManagedServiceRole", {
-      description: "Role assumed by the Restate managed service to invoke our services",
+    // This role should be easier to customize or override completely: https://github.com/restatedev/cdk/issues/21
+    this.invokerRole = new iam.Role(this, "RestateServiceInvokerRole", {
+      description: "Role assumed by Restate Cloud when invoking Lambda service handlers",
       assumedBy: new iam.ArnPrincipal("arn:aws:iam::663487780041:role/restate-dev"),
       externalIds: [props.clusterId],
     });
 
-    this.ingressEndpoint = `https://${props.clusterId}.dev.restate.cloud:${RESTATE_INGRESS_PORT}`;
-    this.metaEndpoint = `https://${props.clusterId}.dev.restate.cloud:${RESTATE_META_PORT}`;
+    this.ingressUrl = `https://${props.clusterId}.dev.restate.cloud:${RESTATE_INGRESS_PORT}`;
+    this.adminUrl = `https://${props.clusterId}.dev.restate.cloud:${RESTATE_ADMIN_PORT}`;
     this.authToken = ssm.Secret.fromSecretCompleteArn(this, "ClusterAuthToken", props.authTokenSecretArn);
 
     const registrationProvider = new RegistrationProvider(this, "RegistrationProvider", { authToken: this.authToken });
