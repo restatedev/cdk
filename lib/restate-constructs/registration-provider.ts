@@ -20,15 +20,22 @@ import * as ec2 from "aws-cdk-lib/aws-ec2";
 
 const DEFAULT_TIMEOUT = cdk.Duration.seconds(180);
 
+/**
+ * This construct implements a custom CloudFormation resource provider that handles deploying Lambda-based service
+ * handlers with a Restate environment. It is used internally by the Cloud and self-hosted Restate environment
+ * constructs and not intended for direct use by end users of Restate.
+ *
+ * This functionality is implemented as a custom resource so that we are notified of any updates to service handler
+ * functions: by creating a CloudFormation component, we can model the dependency that any changes to the handlers need
+ * to be communicated to the registrar. Without this dependency, CloudFormation might perform an update deployment that
+ * triggered by a Lambda handler code or configuration change, and the Restate environment would be unaware of it.
+ */
 export class RegistrationProvider extends Construct {
+  /** The ARN of the custom resource provider Lambda handler. */
   readonly serviceToken: string;
 
   constructor(scope: Construct, id: string, props: { authToken?: ssm.ISecret; timeout?: cdk.Duration; vpc?: ec2.Vpc }) {
     super(scope, id);
-
-    if (props.vpc) {
-      console.log("Using VPC!");
-    }
 
     const registrationHandler = new lambda_node.NodejsFunction(this, "RegistrationHandler", {
       description: "Restate custom registration handler",

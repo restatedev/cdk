@@ -58,43 +58,46 @@ export class LambdaServiceRegistry extends Construct {
   }
 
   private registerServices(environment: RestateEnvironment) {
-    const invokerRole = iam.Role.fromRoleArn(this, "InvokerRole", environment.invokerRole.roleArn);
+    const invokerRole = environment.invokerRole ? iam.Role.fromRoleArn(this, "InvokerRole", environment.invokerRole.roleArn) : undefined;
 
-    const allowInvokeFunction = new iam.Policy(this, "AllowInvokeFunction", {
-      statements: [
-        new iam.PolicyStatement({
-          sid: "AllowInvokeAnyFunctionVersion",
-          actions: ["lambda:InvokeFunction"],
-          resources: Object.values(this.serviceHandlers)
-            .map(handler => handler.functionArn + ":*"),
-        }),
-      ],
-    });
-
-    invokerRole.attachInlinePolicy(allowInvokeFunction);
+    if (invokerRole) {
+      const allowInvokeFunction = new iam.Policy(this, "AllowInvokeFunction", {
+        statements: [
+          new iam.PolicyStatement({
+            sid: "AllowInvokeAnyFunctionVersion",
+            actions: ["lambda:InvokeFunction"],
+            resources: Object.values(this.serviceHandlers)
+              .map(handler => handler.functionArn + ":*"),
+          }),
+        ],
+      });
+      invokerRole.attachInlinePolicy(allowInvokeFunction);
+    }
 
     for (const [path, handler] of Object.entries(this.serviceHandlers)) {
       this.registerHandler({
         adminUrl: environment.adminUrl,
-        invokerRoleArn: invokerRole.roleArn,
+        invokerRoleArn: invokerRole?.roleArn,
         authTokenSecretArn: environment.authToken?.secretArn,
-      }, { path, handler }, allowInvokeFunction);
+      }, { path, handler }, invokerRole);
     }
   }
 
   private registerHandler(restate: EnvironmentDetails, service: {
     path: RestatePath,
     handler: lambda.Function
-  }, allowInvokeFunction: iam.Policy) {
+  }, innvokerRole?: iam.IRole) {
     const registrar = new RestateServiceRegistrar(this, service.handler.node.id + "Discovery", {
       environment: restate,
       service,
       serviceToken: this.registrationProviderToken.value,
     });
 
-    // CloudFormation doesn't know that Restate depends on this role to call services; we must ensure that Lambda
-    // permission changes are applied before we can trigger discovery (represented by the registrar).
-    registrar.node.addDependency(allowInvokeFunction);
+    if (innvokerRole) {
+      // CloudFormation doesn't know that Restate depends on this role to call services; we must ensure that Lambda
+      // permission changes are applied before we can trigger discovery (represented by the registrar).
+      registrar.node.addDependency(innvokerRole);
+    }
   }
 }
 
@@ -128,6 +131,6 @@ class RestateServiceRegistrar extends Construct {
 
 interface EnvironmentDetails {
   readonly adminUrl: string;
-  readonly invokerRoleArn: string;
+  readonly invokerRoleArn?: string;
   readonly authTokenSecretArn?: string;
 }

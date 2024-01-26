@@ -7,7 +7,7 @@ import * as ssm from "aws-cdk-lib/aws-secretsmanager";
  * a self-hosted deployment.
  */
 export interface RestateEnvironment {
-  readonly invokerRole: iam.IRole;
+  readonly invokerRole?: iam.IRole;
   readonly adminUrl: string;
   readonly authToken?: ssm.ISecret;
   readonly registrationProviderToken: cdk.CfnOutput;
