@@ -45,5 +45,8 @@
   "directories": {
     "lib": "lib",
     "test": "test"
+  },
+  "dependencies": {
+    "fetch-h2": "^3.0.2"
   }
 }
