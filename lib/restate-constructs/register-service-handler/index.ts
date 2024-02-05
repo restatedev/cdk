@@ -43,7 +43,7 @@ const DEPLOYMENTS_PATH_LEGACY = "endpoints"; // temporarily fall back for legacy
  * Custom Resource event handler for Restate service registration. This handler backs the custom resources created by
  * {@link LambdaServiceRegistry} to facilitate Lambda service handler discovery.
  */
-export const handler: Handler<CloudFormationCustomResourceEvent, void> = async function(event) {
+export const handler: Handler<CloudFormationCustomResourceEvent, void> = async function (event) {
   console.log({ event });
 
   if (event.RequestType === "Delete") {
@@ -144,8 +144,6 @@ export const handler: Handler<CloudFormationCustomResourceEvent, void> = async f
         //agent: INSECURE ? new https.Agent({ rejectUnauthorized: false }) : undefined,
       }).finally(() => clearTimeout(registerCallTimeout));
 
-      console.log(`Got registration response back: ${registerDeploymentResponse.status}`);
-
       if (registerDeploymentResponse.status == 404 && attempt == 1) {
         deploymentsUrl = `${props.adminUrl}/${DEPLOYMENTS_PATH_LEGACY}`;
         console.log(`Got 404, falling back to <0.7.0 legacy endpoint registration at: ${deploymentsUrl}`);
@@ -164,6 +162,12 @@ export const handler: Handler<CloudFormationCustomResourceEvent, void> = async f
 
         console.log("Success!");
         return;
+      } else {
+        console.log({
+          message: `Got error response from Restate.`,
+          code: registerDeploymentResponse.status,
+          body: await registerDeploymentResponse.text(),
+        });
       }
     } catch (e) {
       console.error(`Service registration call failed: ${(e as Error)?.message} (attempt ${attempt})`);
