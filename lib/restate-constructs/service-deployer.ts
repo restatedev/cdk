@@ -16,6 +16,8 @@ import path from "node:path";
 import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as cdk from "aws-cdk-lib";
 import * as cr from "aws-cdk-lib/custom-resources";
+import { IRestateEnvironment } from "./restate-environment";
+import { RegistrationProperties } from "./register-service-handler";
 
 const DEFAULT_TIMEOUT = cdk.Duration.seconds(180);
 
@@ -73,5 +75,49 @@ export class ServiceDeployer extends Construct {
     props.authToken?.grantRead(eventHandler);
 
     this.deploymentResourceProvider = new cr.Provider(this, "CustomResourceProvider", { onEventHandler: eventHandler });
+  }
+
+  /**
+   * Deploy a Lambda-backed Restate service to a given environment. This will register a deployment that will trigger
+   * a Restate registration whenever the handler resource changes.
+   *
+   * @param serviceName the service name within Restate - this must match the service's self-reported name during discovery
+   * @param handler service handler - must be a specific function version, use "latest" if you don't care about explicit versioning
+   * @param environment target Restate environment
+   * @param options additional options; see field documentation for details
+   */
+  deployService(
+    serviceName: string,
+    handler: lambda.IVersion,
+    environment: IRestateEnvironment,
+    options?: {
+      adminAuthTokenSecretArn?: string;
+      skipInvokeFunctionGrant?: boolean;
+      configurationVersion?: string;
+    },
+  ) {
+    const deployment = new cdk.CustomResource(handler, "RestateDeployment", {
+      serviceToken: this.deploymentResourceProvider.serviceToken,
+      resourceType: "Custom::RestateServiceDeployment",
+      properties: {
+        servicePath: serviceName,
+        adminUrl: environment.adminUrl,
+        authTokenSecretArn: options?.adminAuthTokenSecretArn,
+        serviceLambdaArn: handler.functionArn,
+        invokeRoleArn: environment.invokerRole?.roleArn,
+        removalPolicy: cdk.RemovalPolicy.RETAIN,
+        configurationVersion: options?.configurationVersion,
+      } satisfies RegistrationProperties,
+    });
+
+    if (environment.invokerRole) {
+      if (!options?.skipInvokeFunctionGrant) {
+        handler.lambda.grantInvoke(environment.invokerRole);
+      }
+
+      // CloudFormation doesn't know that Restate depends on this role to call services; we must ensure that Lambda
+      // permission changes are applied before we can trigger discovery.
+      deployment.node.addDependency(environment.invokerRole);
+    }
   }
 }

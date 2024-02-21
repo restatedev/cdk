@@ -40,6 +40,8 @@ export type LambdaServiceRegistryProps = {
 /**
  * Manage registration of a set of Lambda-deployed Restate RPC Service handlers with a Restate environment. This
  * construct creates a custom resource which will trigger Restate service discovery on handler function changes.
+ *
+ * @deprecated use {@link ServiceDeployer.deployService} instead
  */
 export class LambdaServiceRegistry extends Construct {
   private readonly deployerServiceToken: string;

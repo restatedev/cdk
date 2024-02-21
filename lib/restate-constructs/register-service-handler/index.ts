@@ -25,6 +25,8 @@ export interface RegistrationProperties {
   invokeRoleArn?: string;
   removalPolicy?: cdk.RemovalPolicy;
   authTokenSecretArn?: string;
+  /* Not used by the handler, purely used to trick CloudFormation to perform an update when it otherwise would not. */
+  configurationVersion?: string;
 }
 
 type RegisterDeploymentResponse = {
