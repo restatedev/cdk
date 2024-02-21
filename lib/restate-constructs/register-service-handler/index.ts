@@ -11,11 +11,10 @@
 
 import { Handler } from "aws-lambda/handler";
 import { CloudFormationCustomResourceEvent } from "aws-lambda/trigger/cloudformation-custom-resource";
-import { fetch } from "fetch-h2";
-// import fetch from "node-fetch";
+// import { fetch } from "fetch-h2";
+import fetch from "node-fetch";
 import * as cdk from "aws-cdk-lib";
 import { GetSecretValueCommand, SecretsManagerClient } from "@aws-sdk/client-secrets-manager";
-// import * as https from "https";
 import { randomInt } from "crypto";
 
 export interface RegistrationProperties {
@@ -87,17 +86,17 @@ export const handler: Handler<CloudFormationCustomResourceEvent, void> = async f
   console.log(`Performing health check against: ${healthCheckUrl}`);
   attempt = 1;
   while (true) {
-    // const controller = new AbortController();
-    // const healthCheckTimeout = setTimeout(() => controller.abort("timeout"), 5_000);
+    const controller = new AbortController();
+    const healthCheckTimeout = setTimeout(() => controller.abort("timeout"), 5_000);
     let healthResponse = undefined;
     let errorMessage = undefined;
     try {
       healthResponse = await fetch(healthCheckUrl, {
-        //signal: controller.signal,
-        timeout: 5_000,
+        signal: controller.signal,
+        // timeout: 5_000,
         headers: authHeader,
         //agent: INSECURE ? new https.Agent({ rejectUnauthorized: false }) : undefined,
-      }); //.finally(() => clearTimeout(healthCheckTimeout));
+      }).finally(() => clearTimeout(healthCheckTimeout));
 
       console.log(`Got health check response back: ${healthResponse.status}`);
       if (healthResponse.status >= 200 && healthResponse.status < 300) {
@@ -134,11 +133,11 @@ export const handler: Handler<CloudFormationCustomResourceEvent, void> = async f
   while (true) {
     try {
       console.log(`Making request #${attempt}...`);
-      // const controller = new AbortController();
-      // const registerCallTimeout = setTimeout(() => controller.abort("timeout"), 10_000);
+      const controller = new AbortController();
+      const registerCallTimeout = setTimeout(() => controller.abort("timeout"), 10_000);
       const registerDeploymentResponse = await fetch(deploymentsUrl, {
         //signal: controller.signal,
-        timeout: 10_000,
+        // timeout: 10_000,
         method: "POST",
         body: registrationRequest,
         headers: {
@@ -146,7 +145,7 @@ export const handler: Handler<CloudFormationCustomResourceEvent, void> = async f
           ...authHeader,
         },
         //agent: INSECURE ? new https.Agent({ rejectUnauthorized: false }) : undefined,
-      }); // .finally(() => clearTimeout(registerCallTimeout));
+      }).finally(() => clearTimeout(registerCallTimeout));
 
       if (registerDeploymentResponse.status == 404 && attempt == 1) {
         deploymentsUrl = `${props.adminUrl}/${DEPLOYMENTS_PATH_LEGACY}`;
