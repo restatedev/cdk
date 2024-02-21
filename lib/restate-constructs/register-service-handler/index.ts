@@ -12,6 +12,7 @@
 import { Handler } from "aws-lambda/handler";
 import { CloudFormationCustomResourceEvent } from "aws-lambda/trigger/cloudformation-custom-resource";
 import { fetch } from "fetch-h2";
+// import fetch from "node-fetch";
 import * as cdk from "aws-cdk-lib";
 import { GetSecretValueCommand, SecretsManagerClient } from "@aws-sdk/client-secrets-manager";
 // import * as https from "https";
@@ -130,8 +131,9 @@ export const handler: Handler<CloudFormationCustomResourceEvent, void> = async f
   attempt = 1;
   while (true) {
     try {
-      const controller = new AbortController();
-      const registerCallTimeout = setTimeout(() => controller.abort("timeout"), 10_000);
+      console.log(`Making request #${attempt}...`);
+      // const controller = new AbortController();
+      // const registerCallTimeout = setTimeout(() => controller.abort("timeout"), 10_000);
       const registerDeploymentResponse = await fetch(deploymentsUrl, {
         //signal: controller.signal,
         timeout: 10_000,
@@ -142,7 +144,7 @@ export const handler: Handler<CloudFormationCustomResourceEvent, void> = async f
           ...authHeader,
         },
         //agent: INSECURE ? new https.Agent({ rejectUnauthorized: false }) : undefined,
-      }).finally(() => clearTimeout(registerCallTimeout));
+      }); // .finally(() => clearTimeout(registerCallTimeout));
 
       if (registerDeploymentResponse.status == 404 && attempt == 1) {
         deploymentsUrl = `${props.adminUrl}/${DEPLOYMENTS_PATH_LEGACY}`;
@@ -207,5 +209,5 @@ async function createAuthHeader(props: RegistrationProperties): Promise<Record<s
 }
 
 async function sleep(millis: number) {
-  await new Promise((resolve) => setTimeout(resolve, millis));
+  return new Promise((resolve) => setTimeout(resolve, millis));
 }
