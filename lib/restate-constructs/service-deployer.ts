@@ -91,8 +91,24 @@ export class ServiceDeployer extends Construct {
     handler: lambda.IVersion,
     environment: IRestateEnvironment,
     options?: {
+      /**
+       * SSM secret ARN for the authentication token to use with the admin API.
+       */
       adminAuthTokenSecretArn?: string;
+      /**
+       * Whether to skip granting the invoker role permission to invoke the service handler.
+       */
       skipInvokeFunctionGrant?: boolean;
+      /**
+       * Whether to mark the service as private, and make it unavailable to be called via Restate ingress.
+       * @see https://docs.restate.dev/services/invocation/#private-services
+       */
+      private?: boolean;
+      /**
+       * A dummy parameter to force CloudFormation to update the deployment when the configuration changes. Useful if
+       * you want to target the "latest version" of a service handler and need to force a deployment in order to trigger
+       * discovery.
+       */
       configurationVersion?: string;
     },
   ) {
@@ -106,6 +122,7 @@ export class ServiceDeployer extends Construct {
         serviceLambdaArn: handler.functionArn,
         invokeRoleArn: environment.invokerRole?.roleArn,
         removalPolicy: cdk.RemovalPolicy.RETAIN,
+        private: (options?.private ?? false).toString() as "true" | "false",
         configurationVersion: options?.configurationVersion,
       } satisfies RegistrationProperties,
     });
