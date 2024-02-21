@@ -115,8 +115,10 @@ export class ServiceDeployer extends Construct {
         handler.lambda.grantInvoke(environment.invokerRole);
       }
 
-      // CloudFormation doesn't know that Restate depends on this role to call services; we must ensure that Lambda
-      // permission changes are applied before we can trigger discovery.
+      // Despite the ARN reference above, CloudFormation sometimes tries to invoke the custom resource handler before
+      // all permissions are applied. Adding an explicit dependency includes a dependency on any pending policy updates
+      // defined in the same stack as the service deployer, which seems to help. Some propagation delay might still mean
+      // we lean on retries in the deployer event handler in any event but this reduces the probability of failure.
       deployment.node.addDependency(environment.invokerRole);
     }
   }
