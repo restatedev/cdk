@@ -10,7 +10,7 @@
  */
 
 export * from "./lambda-service-registry";
-export * from "./registration-provider";
+export * from "./service-deployer";
 export * from "./restate-cloud-environment";
 export * from "./restate-environment";
 export * from "./single-node-restate-deployment";

@@ -14,7 +14,7 @@ import * as logs from "aws-cdk-lib/aws-logs";
 import * as ec2 from "aws-cdk-lib/aws-ec2";
 import * as iam from "aws-cdk-lib/aws-iam";
 import { IRestateEnvironment } from "./restate-environment";
-import { RegistrationProvider } from "./registration-provider";
+import { ServiceDeployer } from "./service-deployer";
 
 const PUBLIC_INGRESS_PORT = 443;
 const PUBLIC_ADMIN_PORT = 9073;
@@ -65,7 +65,7 @@ export class SingleNodeRestateDeployment extends Construct implements IRestateEn
 
   readonly ingressUrl: string;
   readonly adminUrl: string;
-  readonly registrationProvider: RegistrationProvider;
+  readonly serviceDeployer: ServiceDeployer;
 
   constructor(scope: Construct, id: string, props: RestateInstanceProps) {
     super(scope, id);
@@ -155,7 +155,7 @@ export class SingleNodeRestateDeployment extends Construct implements IRestateEn
       "Allow traffic from anywhere to Restate admin port",
     );
 
-    this.registrationProvider = new RegistrationProvider(this, "RegistrationProvider", {});
+    this.serviceDeployer = new ServiceDeployer(this, "RegistrationProvider", {});
 
     this.ingressUrl = `https://${restateInstance.instancePublicDnsName}${
       PUBLIC_INGRESS_PORT == 443 ? "" : `:${PUBLIC_INGRESS_PORT}`

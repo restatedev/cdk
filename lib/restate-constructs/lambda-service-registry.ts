@@ -53,7 +53,7 @@ export class LambdaServiceRegistry extends Construct {
     }
 
     this.serviceHandlers = props.handlers;
-    this.deployerServiceToken = props.environment.registrationProvider.serviceToken;
+    this.deployerServiceToken = props.environment.serviceDeployer.deploymentResourceProvider.serviceToken;
     this.registerServices(props.environment);
   }
 

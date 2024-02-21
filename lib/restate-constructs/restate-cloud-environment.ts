@@ -13,7 +13,7 @@ import { Construct } from "constructs";
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as ssm from "aws-cdk-lib/aws-secretsmanager";
 import { IRestateEnvironment, RestateEnvironment } from "./restate-environment";
-import { RegistrationProvider } from "./registration-provider";
+import { ServiceDeployer } from "./service-deployer";
 
 const RESTATE_INGRESS_PORT = 8080;
 const RESTATE_ADMIN_PORT = 9070;
@@ -42,7 +42,7 @@ export class RestateCloudEnvironment extends Construct implements IRestateEnviro
   readonly ingressUrl: string;
   readonly adminUrl: string;
   readonly authToken: ssm.ISecret;
-  readonly registrationProvider: RegistrationProvider;
+  readonly serviceDeployer: ServiceDeployer;
 
   constructor(scope: Construct, id: string, props: RestateCloudEnvironmentProps) {
     super(scope, id);
@@ -58,6 +58,6 @@ export class RestateCloudEnvironment extends Construct implements IRestateEnviro
     this.adminUrl = `https://${props.clusterId}.dev.restate.cloud:${RESTATE_ADMIN_PORT}`;
     this.authToken = ssm.Secret.fromSecretCompleteArn(this, "ClusterAuthToken", props.authTokenSecretArn);
 
-    this.registrationProvider = new RegistrationProvider(this, "RegistrationProvider", { authToken: this.authToken });
+    this.serviceDeployer = new ServiceDeployer(this, "RegistrationProvider", { authToken: this.authToken });
   }
 }

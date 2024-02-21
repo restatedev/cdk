@@ -4,7 +4,7 @@ import * as ssm from "aws-cdk-lib/aws-secretsmanager";
 import { ISecret } from "aws-cdk-lib/aws-secretsmanager";
 import { Construct } from "constructs";
 import { FunctionOptions } from "aws-cdk-lib/aws-lambda";
-import { RegistrationProvider } from "./registration-provider";
+import { ServiceDeployer } from "./service-deployer";
 
 /**
  * A Restate environment is a unique deployment of the Restate service. Implementations of this interface may refer to
@@ -31,22 +31,22 @@ export interface IRestateEnvironment extends Pick<FunctionOptions, "vpc" | "vpcS
   /**
    * A reference to the Restate Custom Resource performing handler deployment.
    *
-   * @see RegistrationProvider
+   * @see ServiceDeployer
    */
-  readonly registrationProvider: RegistrationProvider;
+  readonly serviceDeployer: ServiceDeployer;
 }
 
 export class RestateEnvironment implements IRestateEnvironment {
   readonly adminUrl: string;
   readonly authToken?: ISecret;
   readonly invokerRole?: IRole;
-  readonly registrationProvider: RegistrationProvider;
+  readonly serviceDeployer: ServiceDeployer;
 
   private constructor(scope: Construct, id: string, props: IRestateEnvironment) {
     this.adminUrl = props.adminUrl;
     this.invokerRole = props.invokerRole;
     this.authToken = props.authToken;
-    this.registrationProvider = props.registrationProvider;
+    this.serviceDeployer = props.serviceDeployer;
   }
 
   static fromAttributes(scope: Construct, id: string, attrs: IRestateEnvironment): IRestateEnvironment {

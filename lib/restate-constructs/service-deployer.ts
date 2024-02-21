@@ -29,13 +29,13 @@ const DEFAULT_TIMEOUT = cdk.Duration.seconds(180);
  * to be communicated to the registrar. Without this dependency, CloudFormation might perform an update deployment that
  * triggered by a Lambda handler code or configuration change, and the Restate environment would be unaware of it.
  *
- * You can share the same RegistrationProvider across multiple service registries provided the configuration options
- * are compatible (e.g. the Restate environments it needs to communicate with for deployment are all accessible via the
- * same VPC and Security Groups).
- * */
-export class RegistrationProvider extends Construct {
-  /** The ARN of the custom resource provider Lambda handler. */
-  readonly serviceToken: string;
+ * You can share the same instance across multiple service registries provided the configuration options are compatible
+ * (e.g. the Restate environments it needs to communicate with for deployment are all accessible via the same VPC and
+ * Security Groups).
+ */
+export class ServiceDeployer extends Construct {
+  /** The custom resource provider for handling "deployment" resources. */
+  readonly deploymentResourceProvider: cr.Provider;
 
   constructor(
     scope: Construct,
@@ -46,7 +46,7 @@ export class RegistrationProvider extends Construct {
   ) {
     super(scope, id);
 
-    const eventHandler = new lambda_node.NodejsFunction(this, "RegistrationHandler", {
+    const eventHandler = new lambda_node.NodejsFunction(this, "EventHandler", {
       functionName: props.functionName,
       logGroup: props.logGroup,
       description: "Restate custom registration handler",
@@ -72,7 +72,6 @@ export class RegistrationProvider extends Construct {
     });
     props.authToken?.grantRead(eventHandler);
 
-    const registrationProvider = new cr.Provider(this, "RegistrationProvider", { onEventHandler: eventHandler });
-    this.serviceToken = registrationProvider.serviceToken;
+    this.deploymentResourceProvider = new cr.Provider(this, "CustomResourceProvider", { onEventHandler: eventHandler });
   }
 }
