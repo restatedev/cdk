@@ -16,7 +16,6 @@ import path from "node:path";
 import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as cdk from "aws-cdk-lib";
 import * as cr from "aws-cdk-lib/custom-resources";
-import * as ec2 from "aws-cdk-lib/aws-ec2";
 
 const DEFAULT_TIMEOUT = cdk.Duration.seconds(180);
 
@@ -29,15 +28,27 @@ const DEFAULT_TIMEOUT = cdk.Duration.seconds(180);
  * functions: by creating a CloudFormation component, we can model the dependency that any changes to the handlers need
  * to be communicated to the registrar. Without this dependency, CloudFormation might perform an update deployment that
  * triggered by a Lambda handler code or configuration change, and the Restate environment would be unaware of it.
- */
+ *
+ * You can share the same RegistrationProvider across multiple service registries provided the configuration options
+ * are compatible (e.g. the Restate environments it needs to communicate with for deployment are all accessible via the
+ * same VPC and Security Groups).
+ * */
 export class RegistrationProvider extends Construct {
   /** The ARN of the custom resource provider Lambda handler. */
   readonly serviceToken: string;
 
-  constructor(scope: Construct, id: string, props: { authToken?: ssm.ISecret; timeout?: cdk.Duration; vpc?: ec2.Vpc }) {
+  constructor(
+    scope: Construct,
+    id: string,
+    props: {
+      authToken?: ssm.ISecret;
+    } & Pick<lambda.FunctionOptions, "functionName" | "logGroup" | "timeout" | "vpc" | "vpcSubnets" | "securityGroups">,
+  ) {
     super(scope, id);
 
-    const registrationHandler = new lambda_node.NodejsFunction(this, "RegistrationHandler", {
+    const eventHandler = new lambda_node.NodejsFunction(this, "RegistrationHandler", {
+      functionName: props.functionName,
+      logGroup: props.logGroup,
       description: "Restate custom registration handler",
       entry: path.join(__dirname, "register-service-handler/index.js"),
       architecture: lambda.Architecture.ARM_64,
@@ -51,13 +62,17 @@ export class RegistrationProvider extends Construct {
         minify: false,
         sourceMap: true,
       },
-      ...(props.vpc ? { vpc: props.vpc, subnets: props.vpc.privateSubnets } : {}),
+      ...(props.vpc
+        ? ({
+            vpc: props.vpc,
+            vpcSubnets: props.vpcSubnets,
+            securityGroups: props.securityGroups,
+          } satisfies Pick<lambda.FunctionOptions, "vpc" | "vpcSubnets" | "securityGroups">)
+        : {}),
     });
-    props.authToken?.grantRead(registrationHandler);
+    props.authToken?.grantRead(eventHandler);
 
-    const registrationProvider = new cr.Provider(this, "RegistrationProvider", {
-      onEventHandler: registrationHandler,
-    });
+    const registrationProvider = new cr.Provider(this, "RegistrationProvider", { onEventHandler: eventHandler });
     this.serviceToken = registrationProvider.serviceToken;
   }
 }

@@ -10,10 +10,9 @@
  */
 
 import { Construct } from "constructs";
-import * as cdk from "aws-cdk-lib";
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as ssm from "aws-cdk-lib/aws-secretsmanager";
-import { RestateEnvironment } from "./restate-environment";
+import { IRestateEnvironment, RestateEnvironment } from "./restate-environment";
 import { RegistrationProvider } from "./registration-provider";
 
 const RESTATE_INGRESS_PORT = 8080;
@@ -31,17 +30,19 @@ export interface RestateCloudEnvironmentProps {
 }
 
 /**
- * Restate environment hosted on Restate Cloud. This construct manages the role in the deployment environment that
+ * Restate Managed cluster deployment. This construct manages the role in the deployment environment that
  * Restate Cloud assumes to call registered services, and provides the service registration helper for Lambda-based
  * handlers. An appropriate trust policy will be added to this role that allows Restate to assume it from outside the
  * deployment AWS account.
+ *
+ * @deprecated Use {@link RestateEnvironment.fromAttributes} instead.
  */
-export class RestateCloudEnvironment extends Construct implements RestateEnvironment {
+export class RestateCloudEnvironment extends Construct implements IRestateEnvironment {
   readonly invokerRole: iam.Role;
   readonly ingressUrl: string;
   readonly adminUrl: string;
   readonly authToken: ssm.ISecret;
-  readonly registrationProviderToken: cdk.CfnOutput;
+  readonly registrationProvider: RegistrationProvider;
 
   constructor(scope: Construct, id: string, props: RestateCloudEnvironmentProps) {
     super(scope, id);
@@ -57,11 +58,6 @@ export class RestateCloudEnvironment extends Construct implements RestateEnviron
     this.adminUrl = `https://${props.clusterId}.dev.restate.cloud:${RESTATE_ADMIN_PORT}`;
     this.authToken = ssm.Secret.fromSecretCompleteArn(this, "ClusterAuthToken", props.authTokenSecretArn);
 
-    const registrationProvider = new RegistrationProvider(this, "RegistrationProvider", { authToken: this.authToken });
-    this.registrationProviderToken = new cdk.CfnOutput(this, "RegistrationProviderToken", {
-      description: "Restate service registration provider custom component token used by registry to perform discovery",
-      exportName: [props.prefix, "RegistrationProviderToken"].filter(Boolean).join("-"),
-      value: registrationProvider.serviceToken,
-    });
+    this.registrationProvider = new RegistrationProvider(this, "RegistrationProvider", { authToken: this.authToken });
   }
 }

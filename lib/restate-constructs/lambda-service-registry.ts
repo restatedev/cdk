@@ -15,7 +15,7 @@ import * as lambda from "aws-cdk-lib/aws-lambda";
 import { Construct } from "constructs";
 import { RegistrationProperties } from "./register-service-handler";
 
-import { RestateEnvironment } from "./restate-environment";
+import { IRestateEnvironment, RestateEnvironment } from "./restate-environment";
 
 /**
  * A Restate RPC service path. Example: `greeter`.
@@ -29,20 +29,20 @@ export type LambdaServiceRegistryProps = {
   /**
    * Custom resource provider token required for service discovery.
    */
-  environment: RestateEnvironment;
+  environment: IRestateEnvironment;
 
   /**
    * Lambda Restate service handlers to deploy.
    */
   handlers: Record<RestatePath, lambda.Function>;
-}
+};
 
 /**
  * Manage registration of a set of Lambda-deployed Restate RPC Service handlers with a Restate environment. This
  * construct creates a custom resource which will trigger Restate service discovery on handler function changes.
  */
 export class LambdaServiceRegistry extends Construct {
-  private readonly registrationProviderToken: cdk.CfnOutput;
+  private readonly deployerServiceToken: string;
   private readonly serviceHandlers: Record<RestatePath, lambda.Function>;
 
   constructor(scope: Construct, id: string, props: LambdaServiceRegistryProps) {
@@ -53,12 +53,14 @@ export class LambdaServiceRegistry extends Construct {
     }
 
     this.serviceHandlers = props.handlers;
-    this.registrationProviderToken = props.environment.registrationProviderToken;
+    this.deployerServiceToken = props.environment.registrationProvider.serviceToken;
     this.registerServices(props.environment);
   }
 
   private registerServices(environment: RestateEnvironment) {
-    const invokerRole = environment.invokerRole ? iam.Role.fromRoleArn(this, "InvokerRole", environment.invokerRole.roleArn) : undefined;
+    const invokerRole = environment.invokerRole
+      ? iam.Role.fromRoleArn(this, "InvokerRole", environment.invokerRole.roleArn)
+      : undefined;
 
     if (invokerRole) {
       const allowInvokeFunction = new iam.Policy(this, "AllowInvokeFunction", {
@@ -66,8 +68,7 @@ export class LambdaServiceRegistry extends Construct {
           new iam.PolicyStatement({
             sid: "AllowInvokeAnyFunctionVersion",
             actions: ["lambda:InvokeFunction"],
-            resources: Object.values(this.serviceHandlers)
-              .map(handler => handler.functionArn + ":*"),
+            resources: Object.values(this.serviceHandlers).map((handler) => handler.functionArn + ":*"),
           }),
         ],
       });
@@ -75,61 +76,69 @@ export class LambdaServiceRegistry extends Construct {
     }
 
     for (const [path, handler] of Object.entries(this.serviceHandlers)) {
-      this.registerHandler({
-        adminUrl: environment.adminUrl,
-        invokerRoleArn: invokerRole?.roleArn,
-        authTokenSecretArn: environment.authToken?.secretArn,
-      }, { path, handler }, invokerRole);
+      this.registerHandler(
+        {
+          adminUrl: environment.adminUrl,
+          invokerRoleArn: invokerRole?.roleArn,
+          authTokenSecretArn: environment.authToken?.secretArn,
+        },
+        { path, handler },
+        invokerRole,
+      );
     }
   }
 
-  private registerHandler(restate: EnvironmentDetails, service: {
-    path: RestatePath,
-    handler: lambda.Function
-  }, innvokerRole?: iam.IRole) {
-    const registrar = new RestateServiceRegistrar(this, service.handler.node.id + "Discovery", {
-      environment: restate,
-      service,
-      serviceToken: this.registrationProviderToken.value,
-    });
-
-    if (innvokerRole) {
-      // CloudFormation doesn't know that Restate depends on this role to call services; we must ensure that Lambda
-      // permission changes are applied before we can trigger discovery (represented by the registrar).
-      registrar.node.addDependency(innvokerRole);
-    }
-  }
-}
-
-class RestateServiceRegistrar extends Construct {
-  constructor(scope: Construct, id: string,
-              props: {
-                environment: EnvironmentDetails,
-                service: {
-                  path: RestatePath,
-                  handler: lambda.Function
-                },
-                serviceToken: string,
-              },
+  private registerHandler(
+    deploymentMetadata: DeploymentMetadata,
+    service: {
+      path: RestatePath;
+      handler: lambda.Function;
+    },
+    invokerRole?: iam.IRole,
   ) {
-    super(scope, id);
-
-    new cdk.CustomResource(this, props.service.handler.node.id + "Discovery", {
-      serviceToken: props.serviceToken,
-      resourceType: "Custom::RestateServiceRegistrar",
-      properties: {
-        servicePath: props.service.path,
-        adminUrl: props.environment.adminUrl,
-        authTokenSecretArn: props.environment.authTokenSecretArn,
-        serviceLambdaArn: props.service.handler.currentVersion.functionArn,
-        invokeRoleArn: props.environment.invokerRoleArn,
-        removalPolicy: cdk.RemovalPolicy.RETAIN,
-      } satisfies RegistrationProperties,
+    // We create a unique custom resource for each service handler. This way CloudFormation triggers an update to the
+    // specific deployment resource whenever it makes a change to the handler Lambda. The logical resource is named
+    // "<HandlerFunction>Deployment" since it represents the specific service deployment in the Restate environment.
+    const deployment = lambdaServiceDeployment({
+      deploymentMetadata,
+      service,
+      deployerServiceToken: this.deployerServiceToken,
     });
+
+    if (invokerRole) {
+      // CloudFormation doesn't know that Restate depends on this role to call services; we must ensure that Lambda
+      // permission changes are applied before we can trigger discovery.
+      deployment.node.addDependency(invokerRole);
+    }
   }
 }
 
-interface EnvironmentDetails {
+function lambdaServiceDeployment(props: {
+  deploymentMetadata: DeploymentMetadata;
+  service: {
+    path: RestatePath;
+    handler: lambda.Function;
+  };
+  deployerServiceToken: string;
+}) {
+  return new cdk.CustomResource(props.service.handler, "RestateDeployment", {
+    serviceToken: props.deployerServiceToken,
+    resourceType: "Custom::RestateServiceDeployment",
+    properties: {
+      servicePath: props.service.path,
+      adminUrl: props.deploymentMetadata.adminUrl,
+      authTokenSecretArn: props.deploymentMetadata.authTokenSecretArn,
+      serviceLambdaArn: props.service.handler.currentVersion.functionArn,
+      invokeRoleArn: props.deploymentMetadata.invokerRoleArn,
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+    } satisfies RegistrationProperties,
+  });
+}
+
+/**
+ * Minimal deployment metadata required for Restate service registration.
+ */
+interface DeploymentMetadata {
   readonly adminUrl: string;
   readonly invokerRoleArn?: string;
   readonly authTokenSecretArn?: string;
