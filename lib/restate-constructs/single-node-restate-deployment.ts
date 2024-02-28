@@ -14,6 +14,7 @@ import * as logs from "aws-cdk-lib/aws-logs";
 import * as ec2 from "aws-cdk-lib/aws-ec2";
 import * as iam from "aws-cdk-lib/aws-iam";
 import { IRestateEnvironment } from "./restate-environment";
+import { TracingMode } from "./deployments-common";
 
 const PUBLIC_INGRESS_PORT = 443;
 const PUBLIC_ADMIN_PORT = 9073;
@@ -23,17 +24,12 @@ const RESTATE_IMAGE_DEFAULT = "docker.io/restatedev/restate";
 const RESTATE_DOCKER_DEFAULT_TAG = "latest";
 const ADOT_DOCKER_DEFAULT_TAG = "latest";
 
-export enum TracingMode {
-  DISABLED = "DISABLED",
-  AWS_XRAY = "AWS_XRAY",
-}
-
 export interface RestateInstanceProps {
   /** The VPC in which to launch the Restate host. */
   vpc?: ec2.IVpc;
 
   /** Log group for Restate service logs. */
-  logGroup: logs.LogGroup;
+  logGroup?: logs.LogGroup;
 
   /** Tracing mode for Restate services. Defaults to {@link TracingMode.DISABLED}. */
   tracing?: TracingMode;
@@ -68,19 +64,19 @@ export class SingleNodeRestateDeployment extends Construct implements IRestateEn
   constructor(scope: Construct, id: string, props: RestateInstanceProps) {
     super(scope, id);
 
-    this.vpc =
-      props.vpc ??
-      new ec2.Vpc(this, "Vpc", {
-        maxAzs: 3,
-        createInternetGateway: true,
-        natGateways: 0,
-      });
+    this.vpc = props.vpc ?? ec2.Vpc.fromLookup(this, "Vpc", { isDefault: true });
 
     this.invokerRole = new iam.Role(this, "InstanceRole", {
       assumedBy: new iam.ServicePrincipal("ec2.amazonaws.com"),
       managedPolicies: [iam.ManagedPolicy.fromAwsManagedPolicyName("AmazonSSMManagedInstanceCore")],
     });
-    props.logGroup.grantWrite(this.invokerRole);
+
+    const logGroup =
+      props.logGroup ??
+      new logs.LogGroup(this, "Logs", {
+        logGroupName: `/restate/${id}`,
+      });
+    logGroup.grantWrite(this.invokerRole);
 
     const restateImage = props.restateImage ?? RESTATE_IMAGE_DEFAULT;
     const restateTag = props.restateTag ?? RESTATE_DOCKER_DEFAULT_TAG;
@@ -102,7 +98,7 @@ export class SingleNodeRestateDeployment extends Construct implements IRestateEn
         " --volume /var/restate:/target --network=host",
         " -e RESTATE_OBSERVABILITY__LOG__FORMAT=Json -e RUST_LOG=info,restate_worker::partition=warn",
         " -e RESTATE_OBSERVABILITY__TRACING__ENDPOINT=http://localhost:4317",
-        ` --log-driver=awslogs --log-opt awslogs-group=${props.logGroup.logGroupName}`,
+        ` --log-driver=awslogs --log-opt awslogs-group=${logGroup.logGroupName}`,
         ` ${restateImage}:${restateTag}`,
       ].join(""),
 

@@ -1,5 +1,694 @@
 // Jest Snapshot v1, https://goo.gl/fbAQLP
 
+exports[`Restate constructs Create a self-hosted Restate environment deployed on EC2 1`] = `
+"Resources:
+  RestateInstanceRoleACC59A6F:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: 'sts:AssumeRole'
+            Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+        Version: '2012-10-17'
+      ManagedPolicyArns:
+        - 'Fn::Join':
+            - ''
+            - - 'arn:'
+              - Ref: 'AWS::Partition'
+              - ':iam::aws:policy/AmazonSSMManagedInstanceCore'
+  RestateInstanceRoleDefaultPolicyD1D39538:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyDocument:
+        Statement:
+          - Action:
+              - 'logs:CreateLogStream'
+              - 'logs:PutLogEvents'
+            Effect: Allow
+            Resource:
+              'Fn::GetAtt':
+                - RestateLogsFD86ECAE
+                - Arn
+        Version: '2012-10-17'
+      PolicyName: RestateInstanceRoleDefaultPolicyD1D39538
+      Roles:
+        - Ref: RestateInstanceRoleACC59A6F
+  RestateLogsFD86ECAE:
+    Type: 'AWS::Logs::LogGroup'
+    Properties:
+      RetentionInDays: 731
+    UpdateReplacePolicy: Retain
+    DeletionPolicy: Retain
+  RestateHostInstanceSecurityGroup471D630B:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: RestateOnFargateStack/Restate/Host/InstanceSecurityGroup
+      SecurityGroupEgress:
+        - CidrIp: 0.0.0.0/0
+          Description: Allow all outbound traffic by default
+          IpProtocol: '-1'
+      Tags:
+        - Key: Name
+          Value: RestateOnFargateStack/Restate/Host
+      VpcId: vpc-12345
+  RestateHostInstanceProfile14AE3AC8:
+    Type: 'AWS::IAM::InstanceProfile'
+    Properties:
+      Roles:
+        - Ref: RestateInstanceRoleACC59A6F
+  RestateHost1AC4F9D1:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      AvailabilityZone: dummy1a
+      IamInstanceProfile:
+        Ref: RestateHostInstanceProfile14AE3AC8
+      ImageId:
+        Ref: >-
+          SsmParameterValueawsserviceamiamazonlinuxlatestal2023amikernel61arm64C96584B6F00A464EAD1953AFF4B05118Parameter
+      InstanceType: t4g.micro
+      SecurityGroupIds:
+        - 'Fn::GetAtt':
+            - RestateHostInstanceSecurityGroup471D630B
+            - GroupId
+        - 'Fn::GetAtt':
+            - RestateRestateSecurityGroup73273B13
+            - GroupId
+      SubnetId: s-12345
+      Tags:
+        - Key: Name
+          Value: RestateOnFargateStack/Restate/Host
+      UserData:
+        'Fn::Base64':
+          'Fn::Join':
+            - ''
+            - - >-
+                #!/bin/bash
+
+                yum update -y
+
+                yum install -y docker nginx
+
+                systemctl enable docker.service
+
+                systemctl start docker.service
+
+                docker run --name adot --restart unless-stopped --detach -p
+                4317:4317 -p 55680:55680 -p 8889:8888
+                public.ecr.aws/aws-observability/aws-otel-collector:latest
+
+                docker run --name restate --restart unless-stopped --detach
+                --volume /var/restate:/target --network=host -e
+                RESTATE_OBSERVABILITY__LOG__FORMAT=Json -e
+                RUST_LOG=info,restate_worker::partition=warn -e
+                RESTATE_OBSERVABILITY__TRACING__ENDPOINT=http://localhost:4317
+                --log-driver=awslogs --log-opt awslogs-group=
+              - Ref: RestateLogsFD86ECAE
+              - >2-
+                 docker.io/restatedev/restate:latest
+                mkdir -p /etc/pki/private
+
+                openssl req -new -x509 -nodes -sha256 -days 365 -extensions
+                v3_ca -subj
+                '/C=DE/ST=Berlin/L=Berlin/O=restate.dev/OU=demo/CN=restate.example.com'
+                -newkey rsa:2048 -keyout /etc/pki/private/restate-selfsigned.key
+                -out /etc/pki/private/restate-selfsigned.crt
+
+                cat << EOF > /etc/nginx/conf.d/restate-ingress.conf
+
+                server {
+                  listen 443 ssl http2;
+                  listen [::]:443 ssl http2;
+                  server_name _;
+                  root /usr/share/nginx/html;
+
+                  ssl_certificate "/etc/pki/private/restate-selfsigned.crt";
+                  ssl_certificate_key "/etc/pki/private/restate-selfsigned.key";
+                  ssl_session_cache shared:SSL:1m;
+                  ssl_session_timeout 10m;
+                  ssl_ciphers PROFILE=SYSTEM;
+                  ssl_prefer_server_ciphers on;
+
+                  location / {
+                    proxy_pass http://localhost:8080;
+                  }
+                }
+
+
+                server {
+                  listen 9073 ssl http2;
+                  listen [::]:9073 ssl http2;
+                  server_name _;
+                  root /usr/share/nginx/html;
+
+                  ssl_certificate "/etc/pki/private/restate-selfsigned.crt";
+                  ssl_certificate_key "/etc/pki/private/restate-selfsigned.key";
+                  ssl_session_cache shared:SSL:1m;
+                  ssl_session_timeout 10m;
+                  ssl_ciphers PROFILE=SYSTEM;
+                  ssl_prefer_server_ciphers on;
+
+                  location / {
+                    proxy_pass http://localhost:9070;
+                  }
+                }
+
+                EOF
+
+                systemctl enable nginx
+
+                systemctl start nginx
+    DependsOn:
+      - RestateInstanceRoleDefaultPolicyD1D39538
+      - RestateInstanceRoleACC59A6F
+  RestateRestateSecurityGroup73273B13:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: Restate service ACLs
+      GroupName: RestateSecurityGroup
+      SecurityGroupEgress:
+        - CidrIp: 0.0.0.0/0
+          Description: Allow all outbound traffic by default
+          IpProtocol: '-1'
+      SecurityGroupIngress:
+        - CidrIp: 0.0.0.0/0
+          Description: Allow traffic from anywhere to Restate ingress port
+          FromPort: 443
+          IpProtocol: tcp
+          ToPort: 443
+        - CidrIp: 0.0.0.0/0
+          Description: Allow traffic from anywhere to Restate admin port
+          FromPort: 9073
+          IpProtocol: tcp
+          ToPort: 9073
+      VpcId: vpc-12345
+Parameters: Any<Object>
+"
+`;
+
+exports[`Restate constructs Create a self-hosted Restate environment deployed on ECS Fargate 1`] = `
+"Resources:
+  ZoneA5DE4B68:
+    Type: 'AWS::Route53::HostedZone'
+    Properties:
+      Name: example.com.
+  RestateRestateDataStoreC3956B97:
+    Type: 'AWS::EFS::FileSystem'
+    Properties:
+      Encrypted: true
+      FileSystemPolicy:
+        Statement:
+          - Action: 'elasticfilesystem:ClientMount'
+            Condition:
+              Bool:
+                'elasticfilesystem:AccessedViaMountTarget': 'true'
+            Effect: Allow
+            Principal:
+              AWS: '*'
+            Sid: AllowEfsMount
+          - Action:
+              - 'elasticfilesystem:ClientWrite'
+              - 'elasticfilesystem:ClientRootAccess'
+            Condition:
+              Bool:
+                'elasticfilesystem:AccessedViaMountTarget': 'true'
+            Effect: Allow
+            Principal:
+              AWS: '*'
+        Version: '2012-10-17'
+      FileSystemTags:
+        - Key: Name
+          Value: RestateOnFargateStack/Restate/RestateDataStore
+      LifecyclePolicies:
+        - TransitionToIA: AFTER_30_DAYS
+      PerformanceMode: generalPurpose
+      ThroughputMode: bursting
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+  RestateRestateDataStoreEfsSecurityGroupF2C75FD3:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: RestateOnFargateStack/Restate/RestateDataStore/EfsSecurityGroup
+      SecurityGroupEgress:
+        - CidrIp: 0.0.0.0/0
+          Description: Allow all outbound traffic by default
+          IpProtocol: '-1'
+      Tags:
+        - Key: Name
+          Value: RestateOnFargateStack/Restate/RestateDataStore
+      VpcId: vpc-12345
+  RestateRestateDataStoreEfsSecurityGroupfromRestateOnFargateStackRestateRestateSecurityGroup7775CAEF2049AAF8D85F:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      Description: 'from RestateOnFargateStackRestateRestateSecurityGroup7775CAEF:2049'
+      FromPort: 2049
+      GroupId:
+        'Fn::GetAtt':
+          - RestateRestateDataStoreEfsSecurityGroupF2C75FD3
+          - GroupId
+      IpProtocol: tcp
+      SourceSecurityGroupId:
+        'Fn::GetAtt':
+          - RestateRestateSecurityGroup73273B13
+          - GroupId
+      ToPort: 2049
+  RestateRestateDataStoreEfsMountTarget14FBF0C07:
+    Type: 'AWS::EFS::MountTarget'
+    Properties:
+      FileSystemId:
+        Ref: RestateRestateDataStoreC3956B97
+      SecurityGroups:
+        - 'Fn::GetAtt':
+            - RestateRestateDataStoreEfsSecurityGroupF2C75FD3
+            - GroupId
+      SubnetId: p-12345
+  RestateRestateDataStoreEfsMountTarget2E8E875FF:
+    Type: 'AWS::EFS::MountTarget'
+    Properties:
+      FileSystemId:
+        Ref: RestateRestateDataStoreC3956B97
+      SecurityGroups:
+        - 'Fn::GetAtt':
+            - RestateRestateDataStoreEfsSecurityGroupF2C75FD3
+            - GroupId
+      SubnetId: p-67890
+  RestateRestateClusterDED250CD:
+    Type: 'AWS::ECS::Cluster'
+  RestateRestateTaskTaskRole3425804E:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: 'sts:AssumeRole'
+            Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+        Version: '2012-10-17'
+  RestateRestateTaskTaskRoleDefaultPolicyD6897EE5:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyDocument:
+        Statement:
+          - Action: 'sts:AssumeRole'
+            Effect: Allow
+            Resource:
+              'Fn::GetAtt':
+                - RestateRestateInvokerRole74F38CCD
+                - Arn
+          - Action:
+              - 'elasticfilesystem:ClientMount'
+              - 'elasticfilesystem:ClientWrite'
+              - 'elasticfilesystem:ClientRootAccess'
+            Condition:
+              Bool:
+                'elasticfilesystem:AccessedViaMountTarget': 'true'
+            Effect: Allow
+            Resource:
+              'Fn::GetAtt':
+                - RestateRestateDataStoreC3956B97
+                - Arn
+        Version: '2012-10-17'
+      PolicyName: RestateRestateTaskTaskRoleDefaultPolicyD6897EE5
+      Roles:
+        - Ref: RestateRestateTaskTaskRole3425804E
+  RestateRestateTask73B141AE:
+    Type: 'AWS::ECS::TaskDefinition'
+    Properties:
+      ContainerDefinitions:
+        - Environment:
+            - Name: RESTATE_OBSERVABILITY__LOG__FORMAT
+              Value: Json
+          Essential: true
+          Image: 'ghcr.io/restatedev/restate:cloud2'
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group:
+                Ref: RestateRestateLogs6673AD28
+              awslogs-stream-prefix: restate
+              awslogs-region: region
+          MountPoints:
+            - ContainerPath: /target
+              ReadOnly: false
+              SourceVolume: restateStore
+          Name: restate-runtime
+          PortMappings:
+            - ContainerPort: 8080
+              Protocol: tcp
+            - ContainerPort: 9070
+              Protocol: tcp
+          StartTimeout: 20
+          StopTimeout: 20
+      Cpu: '4096'
+      ExecutionRoleArn:
+        'Fn::GetAtt':
+          - RestateRestateTaskExecutionRole8ED5B0F9
+          - Arn
+      Family: RestateOnFargateStackRestateRestateTaskD92D0B67
+      Memory: '8192'
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      RuntimePlatform:
+        CpuArchitecture: ARM64
+        OperatingSystemFamily: LINUX
+      TaskRoleArn:
+        'Fn::GetAtt':
+          - RestateRestateTaskTaskRole3425804E
+          - Arn
+      Volumes:
+        - EFSVolumeConfiguration:
+            AuthorizationConfig: {}
+            FilesystemId:
+              Ref: RestateRestateDataStoreC3956B97
+          Name: restateStore
+  RestateRestateTaskExecutionRole8ED5B0F9:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: 'sts:AssumeRole'
+            Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+        Version: '2012-10-17'
+  RestateRestateTaskExecutionRoleDefaultPolicy8E1BA931:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyDocument:
+        Statement:
+          - Action:
+              - 'logs:CreateLogStream'
+              - 'logs:PutLogEvents'
+            Effect: Allow
+            Resource:
+              'Fn::GetAtt':
+                - RestateRestateLogs6673AD28
+                - Arn
+        Version: '2012-10-17'
+      PolicyName: RestateRestateTaskExecutionRoleDefaultPolicy8E1BA931
+      Roles:
+        - Ref: RestateRestateTaskExecutionRole8ED5B0F9
+  RestateRestateTaskPolicyA238E9DD:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyDocument:
+        Statement:
+          - Action: 'sts:AssumeRole'
+            Effect: Allow
+            Resource: '*'
+            Sid: AllowAssumeAnyRole
+        Version: '2012-10-17'
+      PolicyName: RestateRestateTaskPolicyA238E9DD
+      Roles:
+        - Ref: RestateRestateTaskTaskRole3425804E
+  RestateRestateInvokerRole74F38CCD:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: 'sts:AssumeRole'
+            Effect: Allow
+            Principal:
+              AWS:
+                'Fn::Join':
+                  - ''
+                  - - 'arn:'
+                    - Ref: 'AWS::Partition'
+                    - ':iam::account-id:root'
+        Version: '2012-10-17'
+      Description: Assumed by Restate deployment to invoke Lambda-based services
+  RestateRestateLogs6673AD28:
+    Type: 'AWS::Logs::LogGroup'
+    Properties:
+      LogGroupName: /pavel/restate-fargate-test
+      RetentionInDays: 7
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+  RestateRestateSecurityGroup73273B13:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: RestateOnFargateStack/Restate/RestateSecurityGroup
+      SecurityGroupEgress:
+        - CidrIp: 0.0.0.0/0
+          Description: Allow all outbound traffic by default
+          IpProtocol: '-1'
+      VpcId: vpc-12345
+  RestateRestateSecurityGroupfromRestateOnFargateStackRestateRestateDataStoreEfsSecurityGroupD2921C8A2049F2042747:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      Description: >-
+        from
+        RestateOnFargateStackRestateRestateDataStoreEfsSecurityGroupD2921C8A:2049
+      FromPort: 2049
+      GroupId:
+        'Fn::GetAtt':
+          - RestateRestateSecurityGroup73273B13
+          - GroupId
+      IpProtocol: tcp
+      SourceSecurityGroupId:
+        'Fn::GetAtt':
+          - RestateRestateDataStoreEfsSecurityGroupF2C75FD3
+          - GroupId
+      ToPort: 2049
+  RestateRestateSecurityGroupfromRestateOnFargateStackRestateAlbSecurityGroup0956EE29808058F0BF62:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      Description: Load balancer to target
+      FromPort: 8080
+      GroupId:
+        'Fn::GetAtt':
+          - RestateRestateSecurityGroup73273B13
+          - GroupId
+      IpProtocol: tcp
+      SourceSecurityGroupId:
+        'Fn::GetAtt':
+          - RestateAlbSecurityGroupFAAA5CAC
+          - GroupId
+      ToPort: 8080
+  RestateRestateSecurityGroupfromRestateOnFargateStackRestateAlbSecurityGroup0956EE299070AE51E8E6:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      Description: Load balancer to target
+      FromPort: 9070
+      GroupId:
+        'Fn::GetAtt':
+          - RestateRestateSecurityGroup73273B13
+          - GroupId
+      IpProtocol: tcp
+      SourceSecurityGroupId:
+        'Fn::GetAtt':
+          - RestateAlbSecurityGroupFAAA5CAC
+          - GroupId
+      ToPort: 9070
+  RestateRestateServiceED254489:
+    Type: 'AWS::ECS::Service'
+    Properties:
+      Cluster:
+        Ref: RestateRestateClusterDED250CD
+      DeploymentConfiguration:
+        Alarms:
+          AlarmNames: []
+          Enable: false
+          Rollback: false
+        DeploymentCircuitBreaker:
+          Enable: true
+          Rollback: true
+        MaximumPercent: 100
+        MinimumHealthyPercent: 0
+      DeploymentController:
+        Type: ECS
+      EnableECSManagedTags: false
+      HealthCheckGracePeriodSeconds: 60
+      LaunchType: FARGATE
+      LoadBalancers:
+        - ContainerName: restate-runtime
+          ContainerPort: 8080
+          TargetGroupArn:
+            Ref: RestateAlbServiceListenerFargateServiceTargetGroup5051F748
+        - ContainerName: restate-runtime
+          ContainerPort: 9070
+          TargetGroupArn:
+            Ref: RestateAlbAdminListenerFargateAdminTargetGroupB830BB5A
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          SecurityGroups:
+            - 'Fn::GetAtt':
+                - RestateRestateSecurityGroup73273B13
+                - GroupId
+          Subnets:
+            - s-12345
+            - s-67890
+      TaskDefinition:
+        Ref: RestateRestateTask73B141AE
+    DependsOn:
+      - RestateAlbAdminListenerFargateAdminTargetGroupB830BB5A
+      - RestateAlbAdminListenerDEA13626
+      - RestateAlbServiceListenerFargateServiceTargetGroup5051F748
+      - RestateAlbServiceListenerF596018C
+      - RestateRestateTaskTaskRoleDefaultPolicyD6897EE5
+      - RestateRestateTaskTaskRole3425804E
+  RestateAlbDE422F47:
+    Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
+    Properties:
+      LoadBalancerAttributes:
+        - Key: deletion_protection.enabled
+          Value: 'false'
+      Scheme: internet-facing
+      SecurityGroups:
+        - 'Fn::GetAtt':
+            - RestateAlbSecurityGroupFAAA5CAC
+            - GroupId
+      Subnets:
+        - s-12345
+        - s-67890
+      Type: application
+  RestateAlbSecurityGroupFAAA5CAC:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: >-
+        Automatically created Security Group for ELB
+        RestateOnFargateStackRestateAlb82A45EC3
+      SecurityGroupIngress:
+        - CidrIp: 0.0.0.0/0
+          Description: Allow from anyone on port 443
+          FromPort: 443
+          IpProtocol: tcp
+          ToPort: 443
+        - CidrIp: 0.0.0.0/0
+          Description: Allow from anyone on port 9073
+          FromPort: 9073
+          IpProtocol: tcp
+          ToPort: 9073
+      VpcId: vpc-12345
+  RestateAlbSecurityGrouptoRestateOnFargateStackRestateRestateSecurityGroup7775CAEF80807AF04D73:
+    Type: 'AWS::EC2::SecurityGroupEgress'
+    Properties:
+      Description: Load balancer to target
+      DestinationSecurityGroupId:
+        'Fn::GetAtt':
+          - RestateRestateSecurityGroup73273B13
+          - GroupId
+      FromPort: 8080
+      GroupId:
+        'Fn::GetAtt':
+          - RestateAlbSecurityGroupFAAA5CAC
+          - GroupId
+      IpProtocol: tcp
+      ToPort: 8080
+  RestateAlbSecurityGrouptoRestateOnFargateStackRestateRestateSecurityGroup7775CAEF90704DBC4BF3:
+    Type: 'AWS::EC2::SecurityGroupEgress'
+    Properties:
+      Description: Load balancer to target
+      DestinationSecurityGroupId:
+        'Fn::GetAtt':
+          - RestateRestateSecurityGroup73273B13
+          - GroupId
+      FromPort: 9070
+      GroupId:
+        'Fn::GetAtt':
+          - RestateAlbSecurityGroupFAAA5CAC
+          - GroupId
+      IpProtocol: tcp
+      ToPort: 9070
+  RestateAlbServiceListenerF596018C:
+    Type: 'AWS::ElasticLoadBalancingV2::Listener'
+    Properties:
+      Certificates:
+        - CertificateArn:
+            Ref: RestateCertificateD6532EB8
+      DefaultActions:
+        - TargetGroupArn:
+            Ref: RestateAlbServiceListenerFargateServiceTargetGroup5051F748
+          Type: forward
+      LoadBalancerArn:
+        Ref: RestateAlbDE422F47
+      Port: 443
+      Protocol: HTTP
+  RestateAlbServiceListenerFargateServiceTargetGroup5051F748:
+    Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
+    Properties:
+      HealthCheckIntervalSeconds: 5
+      HealthCheckPath: /grpc.health.v1.Health/Check
+      HealthCheckTimeoutSeconds: 2
+      HealthyThresholdCount: 3
+      Port: 80
+      Protocol: HTTP
+      TargetGroupAttributes:
+        - Key: deregistration_delay.timeout_seconds
+          Value: '5'
+        - Key: stickiness.enabled
+          Value: 'false'
+      TargetType: ip
+      UnhealthyThresholdCount: 3
+      VpcId: vpc-12345
+  RestateAlbAdminListenerDEA13626:
+    Type: 'AWS::ElasticLoadBalancingV2::Listener'
+    Properties:
+      Certificates:
+        - CertificateArn:
+            Ref: RestateCertificateD6532EB8
+      DefaultActions:
+        - TargetGroupArn:
+            Ref: RestateAlbAdminListenerFargateAdminTargetGroupB830BB5A
+          Type: forward
+      LoadBalancerArn:
+        Ref: RestateAlbDE422F47
+      Port: 9073
+      Protocol: HTTPS
+  RestateAlbAdminListenerFargateAdminTargetGroupB830BB5A:
+    Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
+    Properties:
+      HealthCheckIntervalSeconds: 5
+      HealthCheckPath: /health
+      HealthCheckTimeoutSeconds: 2
+      HealthyThresholdCount: 3
+      Port: 80
+      Protocol: HTTP
+      TargetGroupAttributes:
+        - Key: deregistration_delay.timeout_seconds
+          Value: '5'
+        - Key: stickiness.enabled
+          Value: 'false'
+      TargetType: ip
+      UnhealthyThresholdCount: 3
+      VpcId: vpc-12345
+  RestateCertificateD6532EB8:
+    Type: 'AWS::CertificateManager::Certificate'
+    Properties:
+      DomainName: restate.example.com
+      DomainValidationOptions:
+        - DomainName: restate.example.com
+          HostedZoneId:
+            Ref: ZoneA5DE4B68
+      Tags:
+        - Key: Name
+          Value: RestateOnFargateStack/Restate/Certificate
+      ValidationMethod: DNS
+  RestateAlbAliasA12130FD:
+    Type: 'AWS::Route53::RecordSet'
+    Properties:
+      AliasTarget:
+        DNSName:
+          'Fn::Join':
+            - ''
+            - - dualstack.
+              - 'Fn::GetAtt':
+                  - RestateAlbDE422F47
+                  - DNSName
+        HostedZoneId:
+          'Fn::GetAtt':
+            - RestateAlbDE422F47
+            - CanonicalHostedZoneID
+      HostedZoneId:
+        Ref: ZoneA5DE4B68
+      Name: restate.example.com.
+      Type: A
+"
+`;
+
 exports[`Restate constructs Deploy a Lambda service handler to a remote Restate environment 1`] = `
 "Resources:
   InvokerRole4DB2757E:
