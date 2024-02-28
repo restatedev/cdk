@@ -1,18 +1,20 @@
 import * as cdk from "aws-cdk-lib";
-import { Template } from "aws-cdk-lib/assertions";
 import { RestateEnvironment, ServiceDeployer } from "../lib/restate-constructs";
 import { Construct } from "constructs";
 import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as secretsmanager from "aws-cdk-lib/aws-secretsmanager";
 import * as iam from "aws-cdk-lib/aws-iam";
+import "jest-cdk-snapshot";
 
 describe("Restate constructs", () => {
   test("Deploy a Lambda service handler to a remote Restate environment", () => {
     const app = new cdk.App();
     const stack = new LambdaServiceDeployment(app, "LambdaServiceDeployment", {});
-    app.synth();
-    const template = Template.fromStack(stack);
-    expect(template).toMatchSnapshot();
+
+    expect(stack).toMatchCdkSnapshot({
+      ignoreAssets: true,
+      yaml: true,
+    });
   });
 });
 
