@@ -92,9 +92,10 @@ export class ServiceDeployer extends Construct {
     environment: IRestateEnvironment,
     options?: {
       /**
-       * SSM secret ARN for the authentication token to use with the admin API.
+       * SSM secret ARN for the authentication token to use with the admin API. Takes precedence over the environment's
+       * token, if it is set.
        */
-      adminAuthTokenSecretArn?: string;
+      authToken?: ssm.ISecret;
       /**
        * Whether to skip granting the invoker role permission to invoke the service handler.
        */
@@ -112,13 +113,16 @@ export class ServiceDeployer extends Construct {
       configurationVersion?: string;
     },
   ) {
+    const authToken = options?.authToken ?? environment.authToken;
+    authToken?.grantRead(this.deploymentResourceProvider.onEventHandler);
+
     const deployment = new cdk.CustomResource(handler, "RestateDeployment", {
       serviceToken: this.deploymentResourceProvider.serviceToken,
       resourceType: "Custom::RestateServiceDeployment",
       properties: {
         servicePath: serviceName,
         adminUrl: environment.adminUrl,
-        authTokenSecretArn: options?.adminAuthTokenSecretArn,
+        authTokenSecretArn: authToken?.secretArn,
         serviceLambdaArn: handler.functionArn,
         invokeRoleArn: environment.invokerRole?.roleArn,
         removalPolicy: cdk.RemovalPolicy.RETAIN,
