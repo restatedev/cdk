@@ -2,7 +2,6 @@ import * as iam from "aws-cdk-lib/aws-iam";
 import { IRole } from "aws-cdk-lib/aws-iam";
 import * as ssm from "aws-cdk-lib/aws-secretsmanager";
 import { ISecret } from "aws-cdk-lib/aws-secretsmanager";
-import { Construct } from "constructs";
 import { FunctionOptions } from "aws-cdk-lib/aws-lambda";
 import { ServiceDeployer } from "./service-deployer";
 
@@ -27,13 +26,6 @@ export interface IRestateEnvironment extends Pick<FunctionOptions, "vpc" | "vpcS
    * Authentication token to include as a bearer token in requests to the admin endpoint.
    */
   readonly authToken?: ssm.ISecret;
-
-  /**
-   * A reference to the Restate Custom Resource performing handler deployment.
-   *
-   * @see ServiceDeployer
-   */
-  readonly serviceDeployer: ServiceDeployer;
 }
 
 export class RestateEnvironment implements IRestateEnvironment {
@@ -42,14 +34,13 @@ export class RestateEnvironment implements IRestateEnvironment {
   readonly invokerRole?: IRole;
   readonly serviceDeployer: ServiceDeployer;
 
-  private constructor(scope: Construct, id: string, props: IRestateEnvironment) {
+  private constructor(props: IRestateEnvironment) {
     this.adminUrl = props.adminUrl;
     this.invokerRole = props.invokerRole;
     this.authToken = props.authToken;
-    this.serviceDeployer = props.serviceDeployer;
   }
 
-  static fromAttributes(scope: Construct, id: string, attrs: IRestateEnvironment): IRestateEnvironment {
-    return new RestateEnvironment(scope, id, attrs);
+  static fromAttributes(props: IRestateEnvironment): IRestateEnvironment {
+    return new RestateEnvironment(props);
   }
 }
