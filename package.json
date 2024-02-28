@@ -19,7 +19,7 @@
     "prebundle": "rm -rf dist",
     "postbundle": "cd dist && zip -r index.zip index.js*",
     "watch": "tsc -w",
-    "test": "jest --passWithNoTests",
+    "test": "jest",
     "cdk": "cdk"
   },
   "devDependencies": {
