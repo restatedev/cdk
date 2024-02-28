@@ -18,6 +18,7 @@ import * as cdk from "aws-cdk-lib";
 import * as cr from "aws-cdk-lib/custom-resources";
 import { IRestateEnvironment } from "./restate-environment";
 import { RegistrationProperties } from "./register-service-handler";
+import { NodejsFunctionProps } from "aws-cdk-lib/aws-lambda-nodejs";
 
 const DEFAULT_TIMEOUT = cdk.Duration.seconds(180);
 
@@ -42,21 +43,27 @@ export class ServiceDeployer extends Construct {
   constructor(
     scope: Construct,
     id: string,
-    props: {
-      authToken?: ssm.ISecret;
-    } & Pick<lambda.FunctionOptions, "functionName" | "logGroup" | "timeout" | "vpc" | "vpcSubnets" | "securityGroups">,
+    /**
+     * Allows the custom resource event handler properties to be overridden. The main use case for this is specifying
+     * VPC and security group settings for Restate environments that require it.
+     */
+    props?: Pick<
+      lambda.FunctionOptions,
+      "functionName" | "logGroup" | "timeout" | "vpc" | "vpcSubnets" | "securityGroups"
+    > &
+      Pick<NodejsFunctionProps, "entry">,
   ) {
     super(scope, id);
 
     const eventHandler = new lambda_node.NodejsFunction(this, "EventHandler", {
-      functionName: props.functionName,
-      logGroup: props.logGroup,
+      functionName: props?.functionName,
+      logGroup: props?.logGroup,
       description: "Restate custom registration handler",
-      entry: path.join(__dirname, "register-service-handler/index.js"),
+      entry: props?.entry ?? path.join(__dirname, "register-service-handler/index.js"),
       architecture: lambda.Architecture.ARM_64,
       runtime: lambda.Runtime.NODEJS_LATEST,
       memorySize: 128,
-      timeout: props.timeout ?? DEFAULT_TIMEOUT,
+      timeout: props?.timeout ?? DEFAULT_TIMEOUT,
       environment: {
         NODE_OPTIONS: "--enable-source-maps",
       },
@@ -64,15 +71,14 @@ export class ServiceDeployer extends Construct {
         minify: false,
         sourceMap: true,
       },
-      ...(props.vpc
+      ...(props?.vpc
         ? ({
-            vpc: props.vpc,
-            vpcSubnets: props.vpcSubnets,
-            securityGroups: props.securityGroups,
+            vpc: props?.vpc,
+            vpcSubnets: props?.vpcSubnets,
+            securityGroups: props?.securityGroups,
           } satisfies Pick<lambda.FunctionOptions, "vpc" | "vpcSubnets" | "securityGroups">)
         : {}),
     });
-    props.authToken?.grantRead(eventHandler);
 
     this.deploymentResourceProvider = new cr.Provider(this, "CustomResourceProvider", { onEventHandler: eventHandler });
   }

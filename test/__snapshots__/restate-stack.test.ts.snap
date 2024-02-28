@@ -1,0 +1,415 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`Restate constructs Deploy a Lambda service handler to a remote Restate environment 1`] = `
+{
+  "Parameters": {
+    "BootstrapVersion": {
+      "Default": "/cdk-bootstrap/hnb659fds/version",
+      "Description": "Version of the CDK Bootstrap resources in this environment, automatically retrieved from SSM Parameter Store. [cdk:skip]",
+      "Type": "AWS::SSM::Parameter::Value<String>",
+    },
+  },
+  "Resources": {
+    "InvokerRole4DB2757E": {
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": "sts:AssumeRole",
+              "Effect": "Allow",
+              "Principal": {
+                "AWS": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "arn:",
+                      {
+                        "Ref": "AWS::Partition",
+                      },
+                      ":iam::",
+                      {
+                        "Ref": "AWS::AccountId",
+                      },
+                      ":root",
+                    ],
+                  ],
+                },
+              },
+            },
+          ],
+          "Version": "2012-10-17",
+        },
+      },
+      "Type": "AWS::IAM::Role",
+    },
+    "InvokerRoleDefaultPolicy713FD858": {
+      "Properties": {
+        "PolicyDocument": {
+          "Statement": [
+            {
+              "Action": "lambda:InvokeFunction",
+              "Effect": "Allow",
+              "Resource": [
+                {
+                  "Fn::GetAtt": [
+                    "RestateServiceHandler71409CD7",
+                    "Arn",
+                  ],
+                },
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      {
+                        "Fn::GetAtt": [
+                          "RestateServiceHandler71409CD7",
+                          "Arn",
+                        ],
+                      },
+                      ":*",
+                    ],
+                  ],
+                },
+              ],
+            },
+          ],
+          "Version": "2012-10-17",
+        },
+        "PolicyName": "InvokerRoleDefaultPolicy713FD858",
+        "Roles": [
+          {
+            "Ref": "InvokerRole4DB2757E",
+          },
+        ],
+      },
+      "Type": "AWS::IAM::Policy",
+    },
+    "RestateApiKey6463672F": {
+      "DeletionPolicy": "Delete",
+      "Properties": {
+        "SecretString": "api-key",
+      },
+      "Type": "AWS::SecretsManager::Secret",
+      "UpdateReplacePolicy": "Delete",
+    },
+    "RestateServiceHandler71409CD7": {
+      "DependsOn": [
+        "RestateServiceHandlerServiceRole07B26D05",
+      ],
+      "Properties": {
+        "Code": {
+          "ZipFile": "{ ... }",
+        },
+        "Handler": "index.handler",
+        "Role": {
+          "Fn::GetAtt": [
+            "RestateServiceHandlerServiceRole07B26D05",
+            "Arn",
+          ],
+        },
+        "Runtime": "nodejs18.x",
+      },
+      "Type": "AWS::Lambda::Function",
+    },
+    "RestateServiceHandlerCurrentVersion40030E671fc2ba09c2d7b4ea8c6a3f8fee895a65": {
+      "Properties": {
+        "FunctionName": {
+          "Ref": "RestateServiceHandler71409CD7",
+        },
+      },
+      "Type": "AWS::Lambda::Version",
+    },
+    "RestateServiceHandlerCurrentVersionRestateDeploymentE8F102EB": {
+      "DeletionPolicy": "Delete",
+      "DependsOn": [
+        "InvokerRoleDefaultPolicy713FD858",
+        "InvokerRole4DB2757E",
+      ],
+      "Properties": {
+        "ServiceToken": {
+          "Fn::GetAtt": [
+            "ServiceDeployerCustomResourceProviderframeworkonEvent528FE6C2",
+            "Arn",
+          ],
+        },
+        "adminUrl": "https://restate.example.com:9070",
+        "authTokenSecretArn": {
+          "Ref": "RestateApiKey6463672F",
+        },
+        "invokeRoleArn": {
+          "Fn::GetAtt": [
+            "InvokerRole4DB2757E",
+            "Arn",
+          ],
+        },
+        "private": "false",
+        "removalPolicy": "retain",
+        "serviceLambdaArn": {
+          "Ref": "RestateServiceHandlerCurrentVersion40030E671fc2ba09c2d7b4ea8c6a3f8fee895a65",
+        },
+        "servicePath": "Service",
+      },
+      "Type": "Custom::RestateServiceDeployment",
+      "UpdateReplacePolicy": "Delete",
+    },
+    "RestateServiceHandlerServiceRole07B26D05": {
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": "sts:AssumeRole",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "lambda.amazonaws.com",
+              },
+            },
+          ],
+          "Version": "2012-10-17",
+        },
+        "ManagedPolicyArns": [
+          {
+            "Fn::Join": [
+              "",
+              [
+                "arn:",
+                {
+                  "Ref": "AWS::Partition",
+                },
+                ":iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+              ],
+            ],
+          },
+        ],
+      },
+      "Type": "AWS::IAM::Role",
+    },
+    "ServiceDeployerCustomResourceProviderframeworkonEvent528FE6C2": {
+      "DependsOn": [
+        "ServiceDeployerCustomResourceProviderframeworkonEventServiceRoleDefaultPolicy740A65C9",
+        "ServiceDeployerCustomResourceProviderframeworkonEventServiceRole865AFB0C",
+      ],
+      "Properties": {
+        "Code": {
+          "S3Bucket": {
+            "Fn::Sub": "cdk-hnb659fds-assets-\${AWS::AccountId}-\${AWS::Region}",
+          },
+          "S3Key": "7382a0addb9f34974a1ea6c6c9b063882af874828f366f5c93b2b7b64db15c94.zip",
+        },
+        "Description": "AWS CDK resource provider framework - onEvent (LambdaServiceDeployment/ServiceDeployer/CustomResourceProvider)",
+        "Environment": {
+          "Variables": {
+            "USER_ON_EVENT_FUNCTION_ARN": {
+              "Fn::GetAtt": [
+                "ServiceDeployerEventHandler89EAD25F",
+                "Arn",
+              ],
+            },
+          },
+        },
+        "Handler": "framework.onEvent",
+        "Role": {
+          "Fn::GetAtt": [
+            "ServiceDeployerCustomResourceProviderframeworkonEventServiceRole865AFB0C",
+            "Arn",
+          ],
+        },
+        "Runtime": "nodejs18.x",
+        "Timeout": 900,
+      },
+      "Type": "AWS::Lambda::Function",
+    },
+    "ServiceDeployerCustomResourceProviderframeworkonEventServiceRole865AFB0C": {
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": "sts:AssumeRole",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "lambda.amazonaws.com",
+              },
+            },
+          ],
+          "Version": "2012-10-17",
+        },
+        "ManagedPolicyArns": [
+          {
+            "Fn::Join": [
+              "",
+              [
+                "arn:",
+                {
+                  "Ref": "AWS::Partition",
+                },
+                ":iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+              ],
+            ],
+          },
+        ],
+      },
+      "Type": "AWS::IAM::Role",
+    },
+    "ServiceDeployerCustomResourceProviderframeworkonEventServiceRoleDefaultPolicy740A65C9": {
+      "Properties": {
+        "PolicyDocument": {
+          "Statement": [
+            {
+              "Action": "lambda:InvokeFunction",
+              "Effect": "Allow",
+              "Resource": [
+                {
+                  "Fn::GetAtt": [
+                    "ServiceDeployerEventHandler89EAD25F",
+                    "Arn",
+                  ],
+                },
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      {
+                        "Fn::GetAtt": [
+                          "ServiceDeployerEventHandler89EAD25F",
+                          "Arn",
+                        ],
+                      },
+                      ":*",
+                    ],
+                  ],
+                },
+              ],
+            },
+          ],
+          "Version": "2012-10-17",
+        },
+        "PolicyName": "ServiceDeployerCustomResourceProviderframeworkonEventServiceRoleDefaultPolicy740A65C9",
+        "Roles": [
+          {
+            "Ref": "ServiceDeployerCustomResourceProviderframeworkonEventServiceRole865AFB0C",
+          },
+        ],
+      },
+      "Type": "AWS::IAM::Policy",
+    },
+    "ServiceDeployerEventHandler89EAD25F": {
+      "DependsOn": [
+        "ServiceDeployerEventHandlerServiceRoleDefaultPolicyFE2DC3C9",
+        "ServiceDeployerEventHandlerServiceRoleF133584F",
+      ],
+      "Properties": {
+        "Architectures": [
+          "arm64",
+        ],
+        "Code": {
+          "S3Bucket": {
+            "Fn::Sub": "cdk-hnb659fds-assets-\${AWS::AccountId}-\${AWS::Region}",
+          },
+          "S3Key": "e4ec531617dd4885872bb89a12c5f0447bf954ef5c73fc92841a978a48428ce5.zip",
+        },
+        "Description": "Restate custom registration handler",
+        "Environment": {
+          "Variables": {
+            "AWS_NODEJS_CONNECTION_REUSE_ENABLED": "1",
+            "NODE_OPTIONS": "--enable-source-maps",
+          },
+        },
+        "Handler": "index.handler",
+        "MemorySize": 128,
+        "Role": {
+          "Fn::GetAtt": [
+            "ServiceDeployerEventHandlerServiceRoleF133584F",
+            "Arn",
+          ],
+        },
+        "Runtime": "nodejs18.x",
+        "Timeout": 180,
+      },
+      "Type": "AWS::Lambda::Function",
+    },
+    "ServiceDeployerEventHandlerServiceRoleDefaultPolicyFE2DC3C9": {
+      "Properties": {
+        "PolicyDocument": {
+          "Statement": [
+            {
+              "Action": [
+                "secretsmanager:GetSecretValue",
+                "secretsmanager:DescribeSecret",
+              ],
+              "Effect": "Allow",
+              "Resource": {
+                "Ref": "RestateApiKey6463672F",
+              },
+            },
+          ],
+          "Version": "2012-10-17",
+        },
+        "PolicyName": "ServiceDeployerEventHandlerServiceRoleDefaultPolicyFE2DC3C9",
+        "Roles": [
+          {
+            "Ref": "ServiceDeployerEventHandlerServiceRoleF133584F",
+          },
+        ],
+      },
+      "Type": "AWS::IAM::Policy",
+    },
+    "ServiceDeployerEventHandlerServiceRoleF133584F": {
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": "sts:AssumeRole",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "lambda.amazonaws.com",
+              },
+            },
+          ],
+          "Version": "2012-10-17",
+        },
+        "ManagedPolicyArns": [
+          {
+            "Fn::Join": [
+              "",
+              [
+                "arn:",
+                {
+                  "Ref": "AWS::Partition",
+                },
+                ":iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+              ],
+            ],
+          },
+        ],
+      },
+      "Type": "AWS::IAM::Role",
+    },
+  },
+  "Rules": {
+    "CheckBootstrapVersion": {
+      "Assertions": [
+        {
+          "Assert": {
+            "Fn::Not": [
+              {
+                "Fn::Contains": [
+                  [
+                    "1",
+                    "2",
+                    "3",
+                    "4",
+                    "5",
+                  ],
+                  {
+                    "Ref": "BootstrapVersion",
+                  },
+                ],
+              },
+            ],
+          },
+          "AssertDescription": "CDK bootstrap stack version 6 required. Please run 'cdk bootstrap' with a recent version of the CDK CLI.",
+        },
+      ],
+    },
+  },
+}
+`;
