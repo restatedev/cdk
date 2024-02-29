@@ -13,9 +13,7 @@ import { Construct } from "constructs";
 import * as logs from "aws-cdk-lib/aws-logs";
 import * as ec2 from "aws-cdk-lib/aws-ec2";
 import * as iam from "aws-cdk-lib/aws-iam";
-import * as cdk from "aws-cdk-lib";
-import { RestateEnvironment } from "./restate-environment";
-import { RegistrationProvider } from "./registration-provider";
+import { IRestateEnvironment } from "./restate-environment";
 
 const PUBLIC_INGRESS_PORT = 443;
 const PUBLIC_ADMIN_PORT = 9073;
@@ -31,6 +29,9 @@ export enum TracingMode {
 }
 
 export interface RestateInstanceProps {
+  /** The VPC in which to launch the Restate host. */
+  vpc?: ec2.IVpc;
+
   /** Log group for Restate service logs. */
   logGroup: logs.LogGroup;
 
@@ -56,23 +57,24 @@ export interface RestateInstanceProps {
  * in a dedicated VPC (unless one is provided). EC2 instance will be allocated
  * a public IP address.
  */
-export class SingleNodeRestateDeployment extends Construct implements RestateEnvironment {
+export class SingleNodeRestateDeployment extends Construct implements IRestateEnvironment {
   readonly instance: ec2.Instance;
   readonly invokerRole: iam.IRole;
-  readonly vpc: ec2.Vpc;
+  readonly vpc: ec2.IVpc;
 
   readonly ingressUrl: string;
   readonly adminUrl: string;
-  readonly registrationProviderToken: cdk.CfnOutput;
 
   constructor(scope: Construct, id: string, props: RestateInstanceProps) {
     super(scope, id);
 
-    this.vpc = new ec2.Vpc(this, "Vpc", {
-      maxAzs: 3,
-      createInternetGateway: true,
-      natGateways: 0,
-    });
+    this.vpc =
+      props.vpc ??
+      new ec2.Vpc(this, "Vpc", {
+        maxAzs: 3,
+        createInternetGateway: true,
+        natGateways: 0,
+      });
 
     this.invokerRole = new iam.Role(this, "InstanceRole", {
       assumedBy: new iam.ServicePrincipal("ec2.amazonaws.com"),
@@ -150,14 +152,6 @@ export class SingleNodeRestateDeployment extends Construct implements RestateEnv
       ec2.Port.tcp(9073),
       "Allow traffic from anywhere to Restate admin port",
     );
-
-    const registrationProvider = new RegistrationProvider(this, "RegistrationProvider", {});
-    this.registrationProviderToken = new cdk.CfnOutput(this, "RegistrationProviderToken", {
-      description:
-        "Custom resource provider service token, needed by the Restate service registry component to trigger discovery",
-      exportName: [props.prefix, "RegistrationProviderToken"].join("-"),
-      value: registrationProvider.serviceToken,
-    });
 
     this.ingressUrl = `https://${restateInstance.instancePublicDnsName}${
       PUBLIC_INGRESS_PORT == 443 ? "" : `:${PUBLIC_INGRESS_PORT}`

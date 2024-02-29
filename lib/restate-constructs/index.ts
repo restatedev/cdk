@@ -9,8 +9,6 @@
  * https://github.com/restatedev/sdk-typescript/blob/main/LICENSE
  */
 
-export * from "./lambda-service-registry";
-export * from "./registration-provider";
-export * from "./restate-cloud-environment";
+export * from "./service-deployer";
 export * from "./restate-environment";
 export * from "./single-node-restate-deployment";
