@@ -11,4 +11,6 @@
 
 export * from "./service-deployer";
 export * from "./restate-environment";
+export * from "./deployments-common";
 export * from "./single-node-restate-deployment";
+export * from "./fargate-restate-deployment";

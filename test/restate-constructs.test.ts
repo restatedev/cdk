@@ -1,15 +1,52 @@
 import * as cdk from "aws-cdk-lib";
-import { RestateEnvironment, ServiceDeployer } from "../lib/restate-constructs";
+import {
+  FargateRestateDeployment,
+  RestateEnvironment,
+  ServiceDeployer,
+  SingleNodeRestateDeployment,
+} from "../lib/restate-constructs";
 import { Construct } from "constructs";
 import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as secretsmanager from "aws-cdk-lib/aws-secretsmanager";
 import * as iam from "aws-cdk-lib/aws-iam";
+import * as route53 from "aws-cdk-lib/aws-route53";
 import "jest-cdk-snapshot";
 
 describe("Restate constructs", () => {
   test("Deploy a Lambda service handler to a remote Restate environment", () => {
     const app = new cdk.App();
     const stack = new LambdaServiceDeployment(app, "LambdaServiceDeployment", {});
+
+    expect(stack).toMatchCdkSnapshot({
+      ignoreAssets: true,
+      yaml: true,
+    });
+  });
+
+  test("Create a self-hosted Restate environment deployed on ECS Fargate", () => {
+    const app = new cdk.App();
+    const stack = new cdk.Stack(app, "RestateOnFargateStack", {
+      env: { account: "account-id", region: "region" },
+    });
+
+    new FargateRestateDeployment(stack, "Restate", {
+      hostedZone: new route53.HostedZone(stack, "Zone", { zoneName: "example.com" }),
+      dnsName: "restate.example.com",
+    });
+
+    expect(stack).toMatchCdkSnapshot({
+      ignoreAssets: true,
+      yaml: true,
+    });
+  });
+
+  test("Create a self-hosted Restate environment deployed on EC2", () => {
+    const app = new cdk.App();
+    const stack = new cdk.Stack(app, "RestateOnFargateStack", {
+      env: { account: "account-id", region: "region" },
+    });
+
+    new SingleNodeRestateDeployment(stack, "Restate", {});
 
     expect(stack).toMatchCdkSnapshot({
       ignoreAssets: true,
