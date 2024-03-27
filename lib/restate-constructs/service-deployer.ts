@@ -11,6 +11,7 @@
 
 import { Construct } from "constructs";
 import * as ssm from "aws-cdk-lib/aws-secretsmanager";
+import * as iam from "aws-cdk-lib/aws-iam";
 import * as lambda_node from "aws-cdk-lib/aws-lambda-nodejs";
 import path from "node:path";
 import * as lambda from "aws-cdk-lib/aws-lambda";
@@ -39,6 +40,8 @@ const DEFAULT_TIMEOUT = cdk.Duration.seconds(180);
 export class ServiceDeployer extends Construct {
   /** The custom resource provider for handling "deployment" resources. */
   readonly deploymentResourceProvider: cr.Provider;
+
+  private invocationPolicy?: iam.Policy;
 
   constructor(
     scope: Construct,
@@ -137,16 +140,24 @@ export class ServiceDeployer extends Construct {
       } satisfies RegistrationProperties,
     });
 
-    if (environment.invokerRole) {
-      if (!options?.skipInvokeFunctionGrant) {
-        handler.lambda.grantInvoke(environment.invokerRole);
+    if (environment.invokerRole && !options?.skipInvokeFunctionGrant) {
+      // We create a separate policy which we'll attach to the provided invoker role. This breaks a circular cross-stack
+      // dependency that would otherwise be created between the service deployer and the invoker role.
+      if (!this.invocationPolicy) {
+        this.invocationPolicy = new iam.Policy(this, "InvocationPolicy");
+        // Despite the ARN reference above, CloudFormation sometimes tries to invoke the custom resource handler before
+        // all permissions are applied. Adding an explicit dependency includes a dependency on any pending policy updates
+        // defined in the same stack as the service deployer, which seems to help. Some propagation delay might still mean
+        // we lean on retries in the deployer event handler in any event but this reduces the probability of failure.
+        deployment.node.addDependency(this.invocationPolicy);
+        this.invocationPolicy.attachToRole(environment.invokerRole);
       }
-
-      // Despite the ARN reference above, CloudFormation sometimes tries to invoke the custom resource handler before
-      // all permissions are applied. Adding an explicit dependency includes a dependency on any pending policy updates
-      // defined in the same stack as the service deployer, which seems to help. Some propagation delay might still mean
-      // we lean on retries in the deployer event handler in any event but this reduces the probability of failure.
-      deployment.node.addDependency(environment.invokerRole);
+      this.invocationPolicy.addStatements(
+        new iam.PolicyStatement({
+          actions: ["lambda:InvokeFunction"],
+          resources: handler.lambda.resourceArnsForGrantInvoke,
+        }),
+      );
     }
   }
 }

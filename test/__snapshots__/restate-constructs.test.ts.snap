@@ -786,8 +786,7 @@ exports[`Restate constructs Deploy a Lambda service handler to a remote Restate 
       removalPolicy: retain
       private: 'false'
     DependsOn:
-      - InvokerRoleDefaultPolicy713FD858
-      - InvokerRole4DB2757E
+      - ServiceDeployerInvocationPolicyD09B639D
     UpdateReplacePolicy: Delete
     DeletionPolicy: Delete
   ServiceDeployerEventHandlerServiceRoleF133584F:
@@ -907,5 +906,26 @@ exports[`Restate constructs Deploy a Lambda service handler to a remote Restate 
       - >-
         ServiceDeployerCustomResourceProviderframeworkonEventServiceRoleDefaultPolicy740A65C9
       - ServiceDeployerCustomResourceProviderframeworkonEventServiceRole865AFB0C
+  ServiceDeployerInvocationPolicyD09B639D:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyDocument:
+        Statement:
+          - Action: 'lambda:InvokeFunction'
+            Effect: Allow
+            Resource:
+              - 'Fn::GetAtt':
+                  - RestateServiceHandler71409CD7
+                  - Arn
+              - 'Fn::Join':
+                  - ''
+                  - - 'Fn::GetAtt':
+                        - RestateServiceHandler71409CD7
+                        - Arn
+                    - ':*'
+        Version: '2012-10-17'
+      PolicyName: ServiceDeployerInvocationPolicyD09B639D
+      Roles:
+        - Ref: InvokerRole4DB2757E
 "
 `;
