@@ -11,10 +11,13 @@
 
 import { Construct } from "constructs";
 import * as logs from "aws-cdk-lib/aws-logs";
+import { RetentionDays } from "aws-cdk-lib/aws-logs";
 import * as ec2 from "aws-cdk-lib/aws-ec2";
 import * as iam from "aws-cdk-lib/aws-iam";
 import { IRestateEnvironment } from "./restate-environment";
 import { TracingMode } from "./deployments-common";
+import * as cdk from "aws-cdk-lib";
+import { RemovalPolicy } from "aws-cdk-lib";
 
 const PUBLIC_INGRESS_PORT = 443;
 const PUBLIC_ADMIN_PORT = 9073;
@@ -24,7 +27,7 @@ const RESTATE_IMAGE_DEFAULT = "docker.io/restatedev/restate";
 const RESTATE_DOCKER_DEFAULT_TAG = "latest";
 const ADOT_DOCKER_DEFAULT_TAG = "latest";
 
-export interface RestateInstanceProps {
+export interface SingleNodeRestateProps {
   /** The VPC in which to launch the Restate host. */
   vpc?: ec2.IVpc;
 
@@ -45,6 +48,11 @@ export interface RestateInstanceProps {
 
   /** Amazon Distro for Open Telemetry Docker image tag. Defaults to `latest`. */
   adotTag?: string;
+
+  /**
+   * Removal policy for long-lived resources (storage, logs). Default: `cdk.RemovalPolicy.DESTROY`.
+   */
+  removalPolicy?: cdk.RemovalPolicy;
 }
 
 /**
@@ -61,7 +69,7 @@ export class SingleNodeRestateDeployment extends Construct implements IRestateEn
   readonly ingressUrl: string;
   readonly adminUrl: string;
 
-  constructor(scope: Construct, id: string, props: RestateInstanceProps) {
+  constructor(scope: Construct, id: string, props: SingleNodeRestateProps) {
     super(scope, id);
 
     this.vpc = props.vpc ?? ec2.Vpc.fromLookup(this, "Vpc", { isDefault: true });
@@ -75,6 +83,8 @@ export class SingleNodeRestateDeployment extends Construct implements IRestateEn
       props.logGroup ??
       new logs.LogGroup(this, "Logs", {
         logGroupName: `/restate/${id}`,
+        retention: RetentionDays.ONE_MONTH,
+        removalPolicy: props.removalPolicy ?? RemovalPolicy.DESTROY,
       });
     logGroup.grantWrite(this.invokerRole);
 

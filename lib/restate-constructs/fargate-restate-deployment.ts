@@ -191,6 +191,7 @@ export class FargateRestateDeployment extends Construct implements IRestateEnvir
       props.logGroup ??
       new logs.LogGroup(this, "Logs", {
         logGroupName: `/restate/${id}`,
+        retention: logs.RetentionDays.ONE_MONTH,
         removalPolicy: props.removalPolicy ?? cdk.RemovalPolicy.DESTROY,
       });
 

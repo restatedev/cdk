@@ -39,9 +39,9 @@ exports[`Restate constructs Create a self-hosted Restate environment deployed on
     Type: 'AWS::Logs::LogGroup'
     Properties:
       LogGroupName: /restate/Restate
-      RetentionInDays: 731
-    UpdateReplacePolicy: Retain
-    DeletionPolicy: Retain
+      RetentionInDays: 30
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
   RestateHostInstanceSecurityGroup471D630B:
     Type: 'AWS::EC2::SecurityGroup'
     Properties:
@@ -422,7 +422,7 @@ exports[`Restate constructs Create a self-hosted Restate environment deployed on
     Type: 'AWS::Logs::LogGroup'
     Properties:
       LogGroupName: /restate/Restate
-      RetentionInDays: 731
+      RetentionInDays: 30
     UpdateReplacePolicy: Delete
     DeletionPolicy: Delete
   RestateSecurityGroup51491232:
@@ -555,10 +555,10 @@ exports[`Restate constructs Create a self-hosted Restate environment deployed on
           IpProtocol: tcp
           ToPort: 443
         - CidrIp: 0.0.0.0/0
-          Description: Allow from anyone on port 9073
-          FromPort: 9073
+          Description: Allow from anyone on port 9070
+          FromPort: 9070
           IpProtocol: tcp
-          ToPort: 9073
+          ToPort: 9070
       VpcId: vpc-12345
   RestateAlbSecurityGrouptoRestateOnFargateStackRestateSecurityGroup7161764780809AF9E3CE:
     Type: 'AWS::EC2::SecurityGroupEgress'
@@ -633,7 +633,7 @@ exports[`Restate constructs Create a self-hosted Restate environment deployed on
           Type: forward
       LoadBalancerArn:
         Ref: RestateAlbDE422F47
-      Port: 9073
+      Port: 9070
       Protocol: HTTPS
   RestateAlbAdminListenerFargateAdminTargetGroupB830BB5A:
     Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
@@ -785,6 +785,7 @@ exports[`Restate constructs Deploy a Lambda service handler to a remote Restate 
           - Arn
       removalPolicy: retain
       private: 'false'
+      insecure: 'false'
     DependsOn:
       - ServiceDeployerInvocationPolicyD09B639D
     UpdateReplacePolicy: Delete
