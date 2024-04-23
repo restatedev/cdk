@@ -24,7 +24,7 @@ import { IRestateEnvironment } from "./restate-environment";
 import { TracingMode } from "./deployments-common";
 
 const PUBLIC_INGRESS_PORT = 443;
-const PUBLIC_ADMIN_PORT = 9073;
+const PUBLIC_ADMIN_PORT = 9070;
 const RESTATE_INGRESS_PORT = 8080;
 const RESTATE_ADMIN_PORT = 9070;
 const RESTATE_IMAGE_DEFAULT = "docker.io/restatedev/restate";

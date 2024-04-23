@@ -158,6 +158,7 @@ export const handler: Handler<CloudFormationCustomResourceEvent, void> = async f
       if (registerDeploymentResponse.status >= 200 && registerDeploymentResponse.status < 300) {
         const response = (await registerDeploymentResponse.json()) as RegisterDeploymentResponse;
 
+        // TODO: there may be more than one! support optional exact/partial matching
         if (response?.services?.[0]?.name !== props.servicePath) {
           failureReason =
             "Restate service registration failed: service name indicated by service response" +
