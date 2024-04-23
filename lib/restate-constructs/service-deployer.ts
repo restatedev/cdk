@@ -13,13 +13,13 @@ import { Construct } from "constructs";
 import * as ssm from "aws-cdk-lib/aws-secretsmanager";
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as lambda_node from "aws-cdk-lib/aws-lambda-nodejs";
+import { NodejsFunctionProps } from "aws-cdk-lib/aws-lambda-nodejs";
 import path from "node:path";
 import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as cdk from "aws-cdk-lib";
 import * as cr from "aws-cdk-lib/custom-resources";
 import { IRestateEnvironment } from "./restate-environment";
 import { RegistrationProperties } from "./register-service-handler";
-import { NodejsFunctionProps } from "aws-cdk-lib/aws-lambda-nodejs";
 
 const DEFAULT_TIMEOUT = cdk.Duration.seconds(180);
 
@@ -120,6 +120,10 @@ export class ServiceDeployer extends Construct {
        * discovery.
        */
       configurationVersion?: string;
+      /**
+       * Whether to accept self-signed certificates.
+       */
+      insecure?: boolean;
     },
   ) {
     const authToken = options?.authToken ?? environment.authToken;
@@ -137,6 +141,7 @@ export class ServiceDeployer extends Construct {
         removalPolicy: cdk.RemovalPolicy.RETAIN,
         private: (options?.private ?? false).toString() as "true" | "false",
         configurationVersion: options?.configurationVersion,
+        insecure: (options?.insecure ?? false).toString() as "true" | "false",
       } satisfies RegistrationProperties,
     });
 
