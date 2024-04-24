@@ -10,23 +10,27 @@ AWS. This library helps you when deploying Restate services to AWS Lambda as wel
 deployments on your own infrastructure. For more information on CDK, please
 see [Getting started with the AWS CDK](https://docs.aws.amazon.com/cdk/v2/guide/getting_started.html).
 
+## Installation
+
+Inside an existing CDK project, add the library from [npm](https://www.npmjs.com/package/@restatedev/restate-cdk):
+
+```shell
+npm i @restatedev/restate-cdk
+```
+
 ## Available constructs
 
-- [`LambdaServiceRegistry`](./lib/restate-constructs/lambda-service-registry.ts) - A collection of Lambda-deployed
-  Restate services, this construct automatically registers the latest function version as a new deployment revision in a
-  Restate instance
 - [`SingleNodeRestateDeployment`](./lib/restate-constructs/single-node-restate-deployment.ts) - Deploys a self-hosted
-  Restate instance on EC2; note this is a single-node deployment targeted at development and testing
-- [`RestateCloudEnvironment`](./lib/restate-constructs/restate-cloud-environment.ts) - A Restate Cloud instance
+  Restate server running on Amazon EC2; this provides a basic single-node deployment targeted at development and testing
+- [`ServiceDeployer`](./lib/restate-constructs/service-deployer.ts) - facilitates registration of Lambda-based service
+  handlers with a Restate environment, such as a self-hosted EC2 environment
 
 For a more detailed overview, please see
 the [Restate CDK documentation](https://docs.restate.dev/deploy/lambda/cdk).
 
 ### Examples
 
-You can use the following examples as references for your own CDK projects:
+You can use the following templates to bootstrap your own CDK projects:
 
-- [hello-world-lambda-cdk](https://github.com/restatedev/examples/tree/main/kotlin/hello-world-lambda-cdk) - Kotlin
-  service deployed to AWS Lambda
-- [Restate Holiday](https://github.com/restatedev/restate-holiday) - a more complex example of a fictional reservation
-  service demonstrating the Saga orchestration pattern
+- [typescript-lambda-cdk](https://github.com/restatedev/examples/tree/main/templates/typescript-lambda-cdk)
+- [kotlin-gradle-lambda-cdk](https://github.com/restatedev/examples/tree/main/templates/kotlin-gradle-lambda-cdk)
