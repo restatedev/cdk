@@ -20,7 +20,7 @@ see [Getting started with the AWS CDK](https://docs.aws.amazon.com/cdk/v2/guide/
 - [`RestateCloudEnvironment`](./lib/restate-constructs/restate-cloud-environment.ts) - A Restate Cloud instance
 
 For a more detailed overview, please see
-the [Restate CDK documentation](https://docs.restate.dev/services/deployment/cdk).
+the [Restate CDK documentation](https://docs.restate.dev/deploy/lambda/cdk).
 
 ### Examples
 
