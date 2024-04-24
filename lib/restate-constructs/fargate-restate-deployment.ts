@@ -98,7 +98,9 @@ export interface RestateFargateProps {
 }
 
 /**
- * Creates a Restate service deployment running as a Fargate task and backed by EFS.,
+ * Creates a Restate service deployment running as a Fargate task and backed by EFS.
+ *
+ * Please note that this construct is still experimental! Use with caution.
  */
 export class FargateRestateDeployment extends Construct implements IRestateEnvironment {
   readonly invokerRole: iam.IRole;
