@@ -111,7 +111,7 @@ export class ServiceDeployer extends Construct {
       skipInvokeFunctionGrant?: boolean;
       /**
        * Whether to mark the service as private, and make it unavailable to be called via Restate ingress.
-       * @see https://docs.restate.dev/services/invocation/#private-services
+       * @see https://docs.restate.dev/operate/registration#private-services
        */
       private?: boolean;
       /**
