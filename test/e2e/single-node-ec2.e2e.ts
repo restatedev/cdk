@@ -48,10 +48,14 @@ const deployer = new ServiceDeployer(stack, "ServiceDeployer", {
     retention: logs.RetentionDays.ONE_MONTH,
     removalPolicy: cdk.RemovalPolicy.DESTROY,
   }),
+  // vpc,
+  // vpcSubnets,
 });
 
 deployer.deployService("Greeter", handler.currentVersion, restateEnvironment, {
+  private: false,
   insecure: true, // self-signed certificate
+  skipInvokeFunctionGrant: true,
 });
 
 new cdk.CfnOutput(stack, "RestateIngressUrl", { value: environment.ingressUrl });

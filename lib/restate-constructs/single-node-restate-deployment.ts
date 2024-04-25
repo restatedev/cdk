@@ -56,10 +56,10 @@ export interface SingleNodeRestateProps {
 }
 
 /**
- * Creates a Restate service deployment backed by a single EC2 instance,
- * suitable for development and testing purposes. The instance will be created
- * in a dedicated VPC (unless one is provided). EC2 instance will be allocated
- * a public IP address.
+ * Creates a Restate service deployment backed by a single EC2 instance, and is suitable for
+ * development and testing purposes.
+ * The EC2 instance will be created in the default VPC unless otherwise specified.
+ * The instance will be assigned a public IP address.
  */
 export class SingleNodeRestateDeployment extends Construct implements IRestateEnvironment {
   readonly instance: ec2.Instance;
