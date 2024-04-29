@@ -110,7 +110,7 @@ export const handler: Handler<CloudFormationCustomResourceEvent, void> = async f
   while (true) {
     console.log(`Making health check request #${attempt}...`);
     const controller = new AbortController();
-    const healthCheckTimeout = setTimeout(() => controller.abort("timeout"), 15_000);
+    const healthCheckTimeout = setTimeout(() => controller.abort("timeout"), 5_000);
     let healthResponse = undefined;
     let errorMessage = undefined;
     try {
@@ -156,7 +156,7 @@ export const handler: Handler<CloudFormationCustomResourceEvent, void> = async f
     try {
       console.log(`Making registration request #${attempt}...`);
       const controller = new AbortController();
-      const registerCallTimeout = setTimeout(() => controller.abort("timeout"), 30_000);
+      const registerCallTimeout = setTimeout(() => controller.abort("timeout"), 10_000);
       const registerDeploymentResponse = await fetch(deploymentsUrl, {
         signal: controller.signal,
         method: "POST",
@@ -191,7 +191,7 @@ export const handler: Handler<CloudFormationCustomResourceEvent, void> = async f
         const isPublic = (props.private ?? "false") === "false";
         console.log(`Marking service ${props.servicePath} as ${isPublic ? "public" : "private"}...`);
         const controller = new AbortController();
-        const privateCallTimeout = setTimeout(() => controller.abort("timeout"), 30_000);
+        const privateCallTimeout = setTimeout(() => controller.abort("timeout"), 10_000);
         const patchResponse = await fetch(`${props.adminUrl}/${SERVICES_PATH}/${props.servicePath}`, {
           signal: controller.signal,
           method: "PATCH",
