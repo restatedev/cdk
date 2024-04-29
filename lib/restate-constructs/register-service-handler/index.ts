@@ -15,7 +15,8 @@ import fetch from "node-fetch";
 import * as cdk from "aws-cdk-lib";
 import { GetSecretValueCommand, SecretsManagerClient } from "@aws-sdk/client-secrets-manager";
 import { randomInt } from "crypto";
-import * as https from "https";
+import * as https from "node:https";
+import * as http from "node:http";
 
 export interface RegistrationProperties {
   servicePath?: string;
@@ -48,10 +49,27 @@ const DEPLOYMENTS_PATH_LEGACY = "endpoints"; // temporarily fall back for legacy
 
 /**
  * Custom Resource event handler for Restate service registration. This handler backs the custom resources created by
- * {@link LambdaServiceRegistry} to facilitate Lambda service handler discovery.
+ * {@link ServiceDeployer} to facilitate Lambda service handler discovery.
  */
 export const handler: Handler<CloudFormationCustomResourceEvent, void> = async function (event) {
   console.log({ event });
+
+  const props = event.ResourceProperties as RegistrationProperties;
+
+  const httpAgent = new http.Agent({
+    keepAlive: true,
+  });
+  const httpsAgent = new https.Agent({
+    keepAlive: true,
+    rejectUnauthorized: props.insecure !== "true",
+  });
+  const agentSelector = (url: URL) => {
+    if (url.protocol == "http:") {
+      return httpAgent;
+    } else {
+      return httpsAgent;
+    }
+  };
 
   if (event.RequestType === "Delete") {
     // Since we retain older Lambda handler versions on update, we also leave the registered service alone. There may
@@ -68,7 +86,7 @@ export const handler: Handler<CloudFormationCustomResourceEvent, void> = async f
     //   const deleteResponse = await fetch(`${props.adminUrl}/${DEPLOYMENTS_PATH}/${id}?force=true`, {
     //     signal: controller.signal,
     //     method: "DELETE",
-    //     agent: INSECURE ? new https.Agent({ rejectUnauthorized: false }) : undefined,
+    //     agent: agentSelector,
     //   }).finally(() => clearTimeout(deleteCallTimeout));
     //
     //   console.log(`Got delete response back: ${deleteResponse.status}`);
@@ -81,16 +99,16 @@ export const handler: Handler<CloudFormationCustomResourceEvent, void> = async f
     return;
   }
 
-  const props = event.ResourceProperties as RegistrationProperties;
   const authHeader = await createAuthHeader(props);
 
   let attempt;
 
   const healthCheckUrl = `${props.adminUrl}/health`;
 
-  console.log(`Performing health check against: ${healthCheckUrl}`);
   attempt = 1;
+  console.log(`Performing health check against: ${healthCheckUrl}`);
   while (true) {
+    console.log(`Making health check request #${attempt}...`);
     const controller = new AbortController();
     const healthCheckTimeout = setTimeout(() => controller.abort("timeout"), 5_000);
     let healthResponse = undefined;
@@ -99,7 +117,7 @@ export const handler: Handler<CloudFormationCustomResourceEvent, void> = async f
       healthResponse = await fetch(healthCheckUrl, {
         signal: controller.signal,
         headers: authHeader,
-        agent: props.insecure ? new https.Agent({ rejectUnauthorized: false }) : undefined,
+        agent: agentSelector,
       }).finally(() => clearTimeout(healthCheckTimeout));
 
       console.log(`Got health check response back: ${healthResponse.status}`);
@@ -132,11 +150,11 @@ export const handler: Handler<CloudFormationCustomResourceEvent, void> = async f
   });
 
   let failureReason;
-  console.log(`Triggering registration at ${deploymentsUrl}: ${registrationRequest}`);
   attempt = 1;
+  console.log(`Triggering registration at ${deploymentsUrl}: ${registrationRequest}`);
   while (true) {
     try {
-      console.log(`Making request #${attempt}...`);
+      console.log(`Making registration request #${attempt}...`);
       const controller = new AbortController();
       const registerCallTimeout = setTimeout(() => controller.abort("timeout"), 10_000);
       const registerDeploymentResponse = await fetch(deploymentsUrl, {
@@ -147,7 +165,7 @@ export const handler: Handler<CloudFormationCustomResourceEvent, void> = async f
           "Content-Type": "application/json",
           ...authHeader,
         },
-        agent: props.insecure ? new https.Agent({ rejectUnauthorized: false }) : undefined,
+        agent: agentSelector,
       }).finally(() => clearTimeout(registerCallTimeout));
 
       if (registerDeploymentResponse.status == 404 && attempt == 1) {
@@ -159,11 +177,13 @@ export const handler: Handler<CloudFormationCustomResourceEvent, void> = async f
         const response = (await registerDeploymentResponse.json()) as RegisterDeploymentResponse;
 
         // TODO: there may be more than one! support optional exact/partial matching
-        if (response?.services?.[0]?.name !== props.servicePath) {
+        if (!response?.services?.find((s) => s.name === props.servicePath)) {
           failureReason =
             "Restate service registration failed: service name indicated by service response" +
             ` ("${response?.services?.[0]?.name})) does not match the expected value ("${props.servicePath}")!`;
-          break; // don't throw immediately - let retry loop decide whether to abort
+
+          attempt = MAX_REGISTRATION_ATTEMPTS; // don't retry this
+          break;
         }
 
         console.log("Successful registration!");
@@ -171,7 +191,7 @@ export const handler: Handler<CloudFormationCustomResourceEvent, void> = async f
         const isPublic = (props.private ?? "false") === "false";
         console.log(`Marking service ${props.servicePath} as ${isPublic ? "public" : "private"}...`);
         const controller = new AbortController();
-        const privateCallTimeout = setTimeout(() => controller.abort("timeout"), 5_000);
+        const privateCallTimeout = setTimeout(() => controller.abort("timeout"), 10_000);
         const patchResponse = await fetch(`${props.adminUrl}/${SERVICES_PATH}/${props.servicePath}`, {
           signal: controller.signal,
           method: "PATCH",
@@ -180,7 +200,7 @@ export const handler: Handler<CloudFormationCustomResourceEvent, void> = async f
             ...authHeader,
           },
           body: JSON.stringify({ public: isPublic }),
-          agent: props.insecure ? new https.Agent({ rejectUnauthorized: false }) : undefined,
+          agent: agentSelector,
         }).finally(() => clearTimeout(privateCallTimeout));
 
         console.log(`Got patch response back: ${patchResponse.status}`);
