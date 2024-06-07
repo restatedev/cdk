@@ -1,6 +1,6 @@
 import * as iam from "aws-cdk-lib/aws-iam";
 import { IRole } from "aws-cdk-lib/aws-iam";
-import * as ssm from "aws-cdk-lib/aws-secretsmanager";
+import * as secretsmanager from "aws-cdk-lib/aws-secretsmanager";
 import { ISecret } from "aws-cdk-lib/aws-secretsmanager";
 import { FunctionOptions } from "aws-cdk-lib/aws-lambda";
 import { ServiceDeployer } from "./service-deployer";
@@ -25,7 +25,7 @@ export interface IRestateEnvironment extends Pick<FunctionOptions, "vpc" | "vpcS
   /**
    * Authentication token to include as a bearer token in requests to the admin endpoint.
    */
-  readonly authToken?: ssm.ISecret;
+  readonly authToken?: secretsmanager.ISecret;
 }
 
 export class RestateEnvironment implements IRestateEnvironment {
