@@ -831,7 +831,6 @@ exports[`Restate constructs Deploy a Lambda service handler to a remote Restate 
       Environment:
         Variables:
           NODE_OPTIONS: '--enable-source-maps'
-          AWS_NODEJS_CONNECTION_REUSE_ENABLED: '1'
       Handler: index.handler
       MemorySize: 128
       Role:
