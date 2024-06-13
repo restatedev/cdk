@@ -213,6 +213,7 @@ export const handler: Handler<CloudFormationCustomResourceEvent, void> = async f
 
         return; // Overall success!
       } else {
+        failureReason = `Registration failed (${registerDeploymentResponse.status}): ${registerDeploymentResponse.statusText}`;
         console.log({
           message: `Got error response from Restate.`,
           code: registerDeploymentResponse.status,
@@ -220,7 +221,7 @@ export const handler: Handler<CloudFormationCustomResourceEvent, void> = async f
         });
       }
     } catch (e) {
-      console.error(`Service registration call failed: ${(e as Error)?.message} (attempt ${attempt})`);
+      console.error(`Registration failed: ${(e as Error)?.message} (attempt ${attempt})`);
       failureReason = (e as Error)?.message;
     }
 
