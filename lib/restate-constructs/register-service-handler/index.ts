@@ -221,11 +221,11 @@ export const handler: Handler<CloudFormationCustomResourceEvent, void> = async f
       }
     } catch (e) {
       console.error(`Service registration call failed: ${(e as Error)?.message} (attempt ${attempt})`);
-      failureReason = `Restate service registration failed: ${(e as Error)?.message}`;
+      failureReason = (e as Error)?.message;
     }
 
     if (attempt >= MAX_REGISTRATION_ATTEMPTS) {
-      failureReason = `Service registration failed after ${attempt} attempts.`;
+      failureReason = `Giving up after ${attempt} attempts. Last error: ${failureReason}`;
       break;
     }
     attempt += 1;
