@@ -23,26 +23,6 @@ const environment = new SingleNodeRestateDeployment(stack, "Restate", {
   }),
 });
 
-new iam.Policy(stack, "AssumeAnyRolePolicy", {
-  statements: [
-    new iam.PolicyStatement({
-      sid: "AllowAssumeAnyRole",
-      actions: ["sts:AssumeRole"],
-      resources: ["*"], // we don't know upfront what invoker roles we may be asked to assume at runtime
-    }),
-  ],
-}).attachToRole(environment.invokerRole);
-
-const invokerRole = new iam.Role(stack, "InvokerRole", {
-  assumedBy: new iam.ArnPrincipal(environment.invokerRole.roleArn),
-});
-invokerRole.grantAssumeRole(environment.invokerRole);
-
-const restateEnvironment = RestateEnvironment.fromAttributes({
-  adminUrl: environment.adminUrl,
-  invokerRole,
-});
-
 const deployer = new ServiceDeployer(stack, "ServiceDeployer", {
   logGroup: new logs.LogGroup(stack, "Deployer", {
     retention: logs.RetentionDays.ONE_MONTH,
@@ -52,7 +32,7 @@ const deployer = new ServiceDeployer(stack, "ServiceDeployer", {
   // vpcSubnets,
 });
 
-deployer.deployService("Greeter", handler.currentVersion, restateEnvironment, {
+deployer.deployService("Greeter", handler.currentVersion, environment, {
   private: false,
   insecure: true, // self-signed certificate
   skipInvokeFunctionGrant: true,
