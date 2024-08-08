@@ -63,6 +63,7 @@ export interface SingleNodeRestateProps {
  */
 export class SingleNodeRestateDeployment extends Construct implements IRestateEnvironment {
   readonly instance: ec2.Instance;
+  readonly instanceRole: iam.IRole;
   readonly invokerRole: iam.IRole;
   readonly vpc: ec2.IVpc;
 
@@ -74,10 +75,24 @@ export class SingleNodeRestateDeployment extends Construct implements IRestateEn
 
     this.vpc = props.vpc ?? ec2.Vpc.fromLookup(this, "Vpc", { isDefault: true });
 
-    this.invokerRole = new iam.Role(this, "InstanceRole", {
+    this.instanceRole = new iam.Role(this, "InstanceRole", {
       assumedBy: new iam.ServicePrincipal("ec2.amazonaws.com"),
       managedPolicies: [iam.ManagedPolicy.fromAwsManagedPolicyName("AmazonSSMManagedInstanceCore")],
     });
+
+    this.invokerRole = new iam.Role(this, "InvokerRole", {
+      assumedBy: this.instanceRole,
+    });
+
+    new iam.Policy(this, "AssumeInvokerRolePolicy", {
+      statements: [
+        new iam.PolicyStatement({
+          sid: "AllowAssumeInvokerRole",
+          actions: ["sts:AssumeRole"],
+          resources: [this.invokerRole.roleArn],
+        }),
+      ],
+    }).attachToRole(this.instanceRole);
 
     const logGroup =
       props.logGroup ??
@@ -86,7 +101,7 @@ export class SingleNodeRestateDeployment extends Construct implements IRestateEn
         retention: RetentionDays.ONE_MONTH,
         removalPolicy: props.removalPolicy ?? RemovalPolicy.DESTROY,
       });
-    logGroup.grantWrite(this.invokerRole);
+    logGroup.grantWrite(this.instanceRole);
 
     const restateImage = props.restateImage ?? RESTATE_IMAGE_DEFAULT;
     const restateTag = props.restateTag ?? RESTATE_DOCKER_DEFAULT_TAG;
@@ -130,7 +145,7 @@ export class SingleNodeRestateDeployment extends Construct implements IRestateEn
       machineImage: ec2.MachineImage.latestAmazonLinux2023({
         cpuType: ec2.AmazonLinuxCpuType.ARM_64,
       }),
-      role: this.invokerRole,
+      role: this.instanceRole,
       userData: restateInitCommands,
     });
     this.instance = restateInstance;
