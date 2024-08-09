@@ -224,7 +224,7 @@ export class SingleNodeRestateDeployment extends Construct implements IRestateEn
         "",
         "  location / {",
         `    proxy_pass http://localhost:${RESTATE_INGRESS_PORT};`,
-        `    proxy_read_timeout ${props.ingressProxyReadTimeout?.toSeconds ?? 3600};`,
+        `    proxy_read_timeout ${props.ingressProxyReadTimeout?.toSeconds() ?? 3600};`,
         "  }",
         "}",
         "",
