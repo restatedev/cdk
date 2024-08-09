@@ -46,6 +46,24 @@ export interface SingleNodeRestateProps {
   /** Restate Docker image tag. Defaults to `latest`. */
   restateTag?: string;
 
+  /** Restate high-level configuration options. Alternatively, you can set {@link restateConfigOverride}. */
+  restateConfig?: {
+    /** Defaults to the construct id if left unspecified. */
+    clusterName?: string;
+    /** RocksDB settings. */
+    rocksdb?: {
+      /** Defaults to `512.0 MB`. */
+      totalMemorySize?: string;
+    };
+  };
+
+  /**
+   * Completely override the Restate server configuration. Note that other Restate configuration options
+   * will effectively be ignored if this is set. See https://docs.restate.dev/operate/configuration/server/
+   * for details.
+   */
+  restateConfigOverride?: string;
+
   /** Amazon Distro for Open Telemetry Docker image tag. Defaults to `latest`. */
   adotTag?: string;
 
@@ -124,7 +142,9 @@ export class SingleNodeRestateDeployment extends Construct implements IRestateEn
     initScript.addCommands(
       "yum install -y docker nginx",
 
-      "systemctl enable docker.service",
+      "mkdir /etc/restate",
+      ["cat << EOF > /etc/restate/config.toml", this.restateConfig(id, props), "EOF"].join("\n"),
+
       "systemctl start docker.service",
       [
         "docker run --name adot --restart unless-stopped --detach",
@@ -133,11 +153,14 @@ export class SingleNodeRestateDeployment extends Construct implements IRestateEn
       ].join(""),
       [
         "docker run --name restate --restart unless-stopped --detach",
-        " --volume /var/restate:/target --network=host",
+        " --volume /etc/restate:/etc/restate",
+        " --volume /var/restate:/restate-data",
+        " --network=host",
         " -e RESTATE_OBSERVABILITY__LOG__FORMAT=Json -e RUST_LOG=info,restate_worker::partition=warn",
         " -e RESTATE_OBSERVABILITY__TRACING__ENDPOINT=http://localhost:4317",
         ` --log-driver=awslogs --log-opt awslogs-group=${logGroup.logGroupName}`,
         ` ${restateImage}:${restateTag}`,
+        " --config-file /etc/restate/config.toml",
       ].join(""),
 
       "mkdir -p /etc/pki/private",
@@ -148,9 +171,7 @@ export class SingleNodeRestateDeployment extends Construct implements IRestateEn
       ].join(""),
 
       ["cat << EOF > /etc/nginx/conf.d/restate-ingress.conf", ingressNginxConfig, "EOF"].join("\n"),
-      "systemctl enable nginx",
       "systemctl start nginx",
-      "systemctl reload nginx", // ensure that we reload config on subsequent reboots in case nginx was already running
     );
 
     const cloudConfig = ec2.UserData.custom([`cloud_final_modules:`, `- [scripts-user, always]`].join("\n"));
@@ -199,6 +220,51 @@ export class SingleNodeRestateDeployment extends Construct implements IRestateEn
       PUBLIC_INGRESS_PORT == 443 ? "" : `:${PUBLIC_INGRESS_PORT}`
     }`;
     this.adminUrl = `https://${restateInstance.instancePublicDnsName}:${PUBLIC_ADMIN_PORT}`;
+  }
+
+  protected restateConfig(id: string, props: SingleNodeRestateProps) {
+    return (
+      props.restateConfigOverride ??
+      [
+        `roles = [`,
+        `    "worker",`,
+        `    "admin",`,
+        `    "metadata-store",`,
+        `]`,
+        `node-name = "restate-0"`,
+        `cluster-name = "localcluster"`,
+        `allow-bootstrap = true`,
+        `bootstrap-num-partitions = 4`,
+        `default-thread-pool-size = 3`,
+        `storage-high-priority-bg-threads = 3`,
+        `storage-low-priority-bg-threads = 3`,
+        `rocksdb-total-memory-size = "${props.restateConfig?.rocksdb?.totalMemorySize ?? "512.0 MB"}"`,
+        `rocksdb-total-memtables-ratio = 0.6000000238418579`,
+        `rocksdb-bg-threads = 3`,
+        `rocksdb-high-priority-bg-threads = 3`,
+        ``,
+        `[worker]`,
+        `internal-queue-length = 1000`,
+        ``,
+        `[worker.storage]`,
+        `rocksdb-max-background-jobs = 3`,
+        `rocksdb-statistics-level = "except-detailed-timers"`,
+        `num-partitions-to-share-memory-budget = 4`,
+        ``,
+        `[admin.query-engine]`,
+        `memory-size = "50.0 MB"`,
+        `query-parallelism = 4`,
+        ``,
+        `[ingress]`,
+        `rocksdb-max-background-jobs = 3`,
+        `rocksdb-statistics-level = "except-detailed-timers"`,
+        `writer-batch-commit-count = 1000`,
+        ``,
+        `[metadata-store.rocksdb]`,
+        `rocksdb-max-background-jobs = 1`,
+        `rocksdb-statistics-level = "except-detailed-timers"`,
+      ].join("\n")
+    );
   }
 
   /**

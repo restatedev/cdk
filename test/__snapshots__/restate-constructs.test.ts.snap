@@ -143,7 +143,76 @@ exports[`Restate constructs Create a self-hosted Restate environment deployed on
 
                         yum install -y docker nginx
 
-                        systemctl enable docker.service
+                        mkdir /etc/restate
+
+                        cat << EOF > /etc/restate/config.toml
+
+                        roles = [
+                            "worker",
+                            "admin",
+                            "metadata-store",
+                        ]
+
+                        node-name = "restate-0"
+
+                        cluster-name = "localcluster"
+
+                        allow-bootstrap = true
+
+                        bootstrap-num-partitions = 4
+
+                        default-thread-pool-size = 3
+
+                        storage-high-priority-bg-threads = 3
+
+                        storage-low-priority-bg-threads = 3
+
+                        rocksdb-total-memory-size = "512.0 MB"
+
+                        rocksdb-total-memtables-ratio = 0.6000000238418579
+
+                        rocksdb-bg-threads = 3
+
+                        rocksdb-high-priority-bg-threads = 3
+
+
+                        [worker]
+
+                        internal-queue-length = 1000
+
+
+                        [worker.storage]
+
+                        rocksdb-max-background-jobs = 3
+
+                        rocksdb-statistics-level = "except-detailed-timers"
+
+                        num-partitions-to-share-memory-budget = 4
+
+
+                        [admin.query-engine]
+
+                        memory-size = "50.0 MB"
+
+                        query-parallelism = 4
+
+
+                        [ingress]
+
+                        rocksdb-max-background-jobs = 3
+
+                        rocksdb-statistics-level = "except-detailed-timers"
+
+                        writer-batch-commit-count = 1000
+
+
+                        [metadata-store.rocksdb]
+
+                        rocksdb-max-background-jobs = 1
+
+                        rocksdb-statistics-level = "except-detailed-timers"
+
+                        EOF
 
                         systemctl start docker.service
 
@@ -152,14 +221,15 @@ exports[`Restate constructs Create a self-hosted Restate environment deployed on
                         public.ecr.aws/aws-observability/aws-otel-collector:latest
 
                         docker run --name restate --restart unless-stopped
-                        --detach --volume /var/restate:/target --network=host -e
+                        --detach --volume /etc/restate:/etc/restate --volume
+                        /var/restate:/restate-data --network=host -e
                         RESTATE_OBSERVABILITY__LOG__FORMAT=Json -e
                         RUST_LOG=info,restate_worker::partition=warn -e
                         RESTATE_OBSERVABILITY__TRACING__ENDPOINT=http://localhost:4317
                         --log-driver=awslogs --log-opt awslogs-group=
                       - Ref: RestateLogsFD86ECAE
                       - >2-
-                         docker.io/restatedev/restate:latest
+                         docker.io/restatedev/restate:latest --config-file /etc/restate/config.toml
                         mkdir -p /etc/pki/private
 
                         openssl req -new -x509 -nodes -sha256 -days 365
@@ -211,11 +281,7 @@ exports[`Restate constructs Create a self-hosted Restate environment deployed on
 
                         EOF
 
-                        systemctl enable nginx
-
                         systemctl start nginx
-
-                        systemctl reload nginx
               - |
 
                 --+AWS+CDK+User+Data+Separator==--
