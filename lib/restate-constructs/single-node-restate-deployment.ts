@@ -53,6 +53,17 @@ export interface SingleNodeRestateProps {
    * Removal policy for long-lived resources (storage, logs). Default: `cdk.RemovalPolicy.DESTROY`.
    */
   removalPolicy?: cdk.RemovalPolicy;
+
+  /**
+   * The read timeout for proxyied ingress requests. Default: 3600 seconds.
+   */
+  ingressProxyReadTimeout?: cdk.Duration;
+
+  /**
+   * Completely override the default nginx configuration for the ingress proxy. Note that other
+   * ingress proxy configuration options will effectively be ignored if this is set.
+   */
+  ingressNginxConfigOverride?: string;
 }
 
 /**
@@ -106,9 +117,11 @@ export class SingleNodeRestateDeployment extends Construct implements IRestateEn
     const restateImage = props.restateImage ?? RESTATE_IMAGE_DEFAULT;
     const restateTag = props.restateTag ?? RESTATE_DOCKER_DEFAULT_TAG;
     const adotTag = props.adotTag ?? ADOT_DOCKER_DEFAULT_TAG;
-    const restateInitCommands = ec2.UserData.forLinux();
-    restateInitCommands.addCommands(
-      "yum update -y",
+
+    const ingressNginxConfig = this.ingressNginxConfig(props);
+
+    const initScript = ec2.UserData.forLinux();
+    initScript.addCommands(
       "yum install -y docker nginx",
 
       "systemctl enable docker.service",
@@ -133,10 +146,18 @@ export class SingleNodeRestateDeployment extends Construct implements IRestateEn
         " -subj '/C=DE/ST=Berlin/L=Berlin/O=restate.dev/OU=demo/CN=restate.example.com'",
         " -newkey rsa:2048 -keyout /etc/pki/private/restate-selfsigned.key -out /etc/pki/private/restate-selfsigned.crt",
       ].join(""),
-      ["cat << EOF > /etc/nginx/conf.d/restate-ingress.conf", NGINX_REVERSE_PROXY_CONFIG, "EOF"].join("\n"),
+
+      ["cat << EOF > /etc/nginx/conf.d/restate-ingress.conf", ingressNginxConfig, "EOF"].join("\n"),
       "systemctl enable nginx",
       "systemctl start nginx",
+      "systemctl reload nginx", // ensure that we reload config on subsequent reboots in case nginx was already running
     );
+
+    const cloudConfig = ec2.UserData.custom([`cloud_final_modules:`, `- [scripts-user, always]`].join("\n"));
+
+    const userData = new ec2.MultipartUserData();
+    userData.addUserDataPart(cloudConfig, "text/cloud-config");
+    userData.addUserDataPart(initScript, "text/x-shellscript");
 
     const restateInstance = new ec2.Instance(this, "Host", {
       vpc: this.vpc,
@@ -146,7 +167,7 @@ export class SingleNodeRestateDeployment extends Construct implements IRestateEn
         cpuType: ec2.AmazonLinuxCpuType.ARM_64,
       }),
       role: this.instanceRole,
-      userData: restateInitCommands,
+      userData,
     });
     this.instance = restateInstance;
 
@@ -179,42 +200,52 @@ export class SingleNodeRestateDeployment extends Construct implements IRestateEn
     }`;
     this.adminUrl = `https://${restateInstance.instancePublicDnsName}:${PUBLIC_ADMIN_PORT}`;
   }
-}
 
-const NGINX_REVERSE_PROXY_CONFIG = [
-  "server {",
-  "  listen 443 ssl http2;",
-  "  listen [::]:443 ssl http2;",
-  "  server_name _;",
-  "  root /usr/share/nginx/html;",
-  "",
-  '  ssl_certificate "/etc/pki/private/restate-selfsigned.crt";',
-  '  ssl_certificate_key "/etc/pki/private/restate-selfsigned.key";',
-  "  ssl_session_cache shared:SSL:1m;",
-  "  ssl_session_timeout 10m;",
-  "  ssl_ciphers PROFILE=SYSTEM;",
-  "  ssl_prefer_server_ciphers on;",
-  "",
-  "  location / {",
-  `    proxy_pass http://localhost:${RESTATE_INGRESS_PORT};`,
-  "  }",
-  "}",
-  "",
-  "server {",
-  "  listen 9073 ssl http2;",
-  "  listen [::]:9073 ssl http2;",
-  "  server_name _;",
-  "  root /usr/share/nginx/html;",
-  "",
-  '  ssl_certificate "/etc/pki/private/restate-selfsigned.crt";',
-  '  ssl_certificate_key "/etc/pki/private/restate-selfsigned.key";',
-  "  ssl_session_cache shared:SSL:1m;",
-  "  ssl_session_timeout 10m;",
-  "  ssl_ciphers PROFILE=SYSTEM;",
-  "  ssl_prefer_server_ciphers on;",
-  "",
-  "  location / {",
-  `    proxy_pass http://localhost:${RESTATE_ADMIN_PORT};`,
-  "  }",
-  "}",
-].join("\n");
+  /**
+   * @param props construct properties
+   * @returns nginx configuration to use for ingress reverse proxy, formatted as a multi-line string
+   */
+  protected ingressNginxConfig(props: SingleNodeRestateProps) {
+    return (
+      props.ingressNginxConfigOverride ??
+      [
+        "server {",
+        "  listen 443 ssl http2;",
+        "  listen [::]:443 ssl http2;",
+        "  server_name _;",
+        "  root /usr/share/nginx/html;",
+        "",
+        '  ssl_certificate "/etc/pki/private/restate-selfsigned.crt";',
+        '  ssl_certificate_key "/etc/pki/private/restate-selfsigned.key";',
+        "  ssl_session_cache shared:SSL:1m;",
+        "  ssl_session_timeout 10m;",
+        "  ssl_ciphers PROFILE=SYSTEM;",
+        "  ssl_prefer_server_ciphers on;",
+        "",
+        "  location / {",
+        `    proxy_pass http://localhost:${RESTATE_INGRESS_PORT};`,
+        `    proxy_read_timeout ${props.ingressProxyReadTimeout?.toSeconds() ?? 3600};`,
+        "  }",
+        "}",
+        "",
+        "server {",
+        "  listen 9073 ssl http2;",
+        "  listen [::]:9073 ssl http2;",
+        "  server_name _;",
+        "  root /usr/share/nginx/html;",
+        "",
+        '  ssl_certificate "/etc/pki/private/restate-selfsigned.crt";',
+        '  ssl_certificate_key "/etc/pki/private/restate-selfsigned.key";',
+        "  ssl_session_cache shared:SSL:1m;",
+        "  ssl_session_timeout 10m;",
+        "  ssl_ciphers PROFILE=SYSTEM;",
+        "  ssl_prefer_server_ciphers on;",
+        "",
+        "  location / {",
+        `    proxy_pass http://localhost:${RESTATE_ADMIN_PORT};`,
+        "  }",
+        "}",
+      ].join("\n")
+    );
+  }
+}

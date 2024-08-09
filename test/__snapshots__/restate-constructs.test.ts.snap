@@ -113,82 +113,112 @@ exports[`Restate constructs Create a self-hosted Restate environment deployed on
         'Fn::Base64':
           'Fn::Join':
             - ''
-            - - >-
-                #!/bin/bash
+            - - >+
+                Content-Type: multipart/mixed;
+                boundary="+AWS+CDK+User+Data+Separator=="
 
-                yum update -y
-
-                yum install -y docker nginx
-
-                systemctl enable docker.service
-
-                systemctl start docker.service
-
-                docker run --name adot --restart unless-stopped --detach -p
-                4317:4317 -p 55680:55680 -p 8889:8888
-                public.ecr.aws/aws-observability/aws-otel-collector:latest
-
-                docker run --name restate --restart unless-stopped --detach
-                --volume /var/restate:/target --network=host -e
-                RESTATE_OBSERVABILITY__LOG__FORMAT=Json -e
-                RUST_LOG=info,restate_worker::partition=warn -e
-                RESTATE_OBSERVABILITY__TRACING__ENDPOINT=http://localhost:4317
-                --log-driver=awslogs --log-opt awslogs-group=
-              - Ref: RestateLogsFD86ECAE
-              - >2-
-                 docker.io/restatedev/restate:latest
-                mkdir -p /etc/pki/private
-
-                openssl req -new -x509 -nodes -sha256 -days 365 -extensions
-                v3_ca -subj
-                '/C=DE/ST=Berlin/L=Berlin/O=restate.dev/OU=demo/CN=restate.example.com'
-                -newkey rsa:2048 -keyout /etc/pki/private/restate-selfsigned.key
-                -out /etc/pki/private/restate-selfsigned.crt
-
-                cat << EOF > /etc/nginx/conf.d/restate-ingress.conf
-
-                server {
-                  listen 443 ssl http2;
-                  listen [::]:443 ssl http2;
-                  server_name _;
-                  root /usr/share/nginx/html;
-
-                  ssl_certificate "/etc/pki/private/restate-selfsigned.crt";
-                  ssl_certificate_key "/etc/pki/private/restate-selfsigned.key";
-                  ssl_session_cache shared:SSL:1m;
-                  ssl_session_timeout 10m;
-                  ssl_ciphers PROFILE=SYSTEM;
-                  ssl_prefer_server_ciphers on;
-
-                  location / {
-                    proxy_pass http://localhost:8080;
-                  }
-                }
+                MIME-Version: 1.0
 
 
-                server {
-                  listen 9073 ssl http2;
-                  listen [::]:9073 ssl http2;
-                  server_name _;
-                  root /usr/share/nginx/html;
+                --+AWS+CDK+User+Data+Separator==
 
-                  ssl_certificate "/etc/pki/private/restate-selfsigned.crt";
-                  ssl_certificate_key "/etc/pki/private/restate-selfsigned.key";
-                  ssl_session_cache shared:SSL:1m;
-                  ssl_session_timeout 10m;
-                  ssl_ciphers PROFILE=SYSTEM;
-                  ssl_prefer_server_ciphers on;
+                Content-Type: text/cloud-config
 
-                  location / {
-                    proxy_pass http://localhost:9070;
-                  }
-                }
+                Content-Transfer-Encoding: base64
 
-                EOF
+              - 'Fn::Base64': |-
+                  cloud_final_modules:
+                  - [scripts-user, always]
+              - |+
 
-                systemctl enable nginx
+                --+AWS+CDK+User+Data+Separator==
+                Content-Type: text/x-shellscript
+                Content-Transfer-Encoding: base64
 
-                systemctl start nginx
+              - 'Fn::Base64':
+                  'Fn::Join':
+                    - ''
+                    - - >-
+                        #!/bin/bash
+
+                        yum install -y docker nginx
+
+                        systemctl enable docker.service
+
+                        systemctl start docker.service
+
+                        docker run --name adot --restart unless-stopped --detach
+                        -p 4317:4317 -p 55680:55680 -p 8889:8888
+                        public.ecr.aws/aws-observability/aws-otel-collector:latest
+
+                        docker run --name restate --restart unless-stopped
+                        --detach --volume /var/restate:/target --network=host -e
+                        RESTATE_OBSERVABILITY__LOG__FORMAT=Json -e
+                        RUST_LOG=info,restate_worker::partition=warn -e
+                        RESTATE_OBSERVABILITY__TRACING__ENDPOINT=http://localhost:4317
+                        --log-driver=awslogs --log-opt awslogs-group=
+                      - Ref: RestateLogsFD86ECAE
+                      - >2-
+                         docker.io/restatedev/restate:latest
+                        mkdir -p /etc/pki/private
+
+                        openssl req -new -x509 -nodes -sha256 -days 365
+                        -extensions v3_ca -subj
+                        '/C=DE/ST=Berlin/L=Berlin/O=restate.dev/OU=demo/CN=restate.example.com'
+                        -newkey rsa:2048 -keyout
+                        /etc/pki/private/restate-selfsigned.key -out
+                        /etc/pki/private/restate-selfsigned.crt
+
+                        cat << EOF > /etc/nginx/conf.d/restate-ingress.conf
+
+                        server {
+                          listen 443 ssl http2;
+                          listen [::]:443 ssl http2;
+                          server_name _;
+                          root /usr/share/nginx/html;
+
+                          ssl_certificate "/etc/pki/private/restate-selfsigned.crt";
+                          ssl_certificate_key "/etc/pki/private/restate-selfsigned.key";
+                          ssl_session_cache shared:SSL:1m;
+                          ssl_session_timeout 10m;
+                          ssl_ciphers PROFILE=SYSTEM;
+                          ssl_prefer_server_ciphers on;
+
+                          location / {
+                            proxy_pass http://localhost:8080;
+                            proxy_read_timeout 3600;
+                          }
+                        }
+
+
+                        server {
+                          listen 9073 ssl http2;
+                          listen [::]:9073 ssl http2;
+                          server_name _;
+                          root /usr/share/nginx/html;
+
+                          ssl_certificate "/etc/pki/private/restate-selfsigned.crt";
+                          ssl_certificate_key "/etc/pki/private/restate-selfsigned.key";
+                          ssl_session_cache shared:SSL:1m;
+                          ssl_session_timeout 10m;
+                          ssl_ciphers PROFILE=SYSTEM;
+                          ssl_prefer_server_ciphers on;
+
+                          location / {
+                            proxy_pass http://localhost:9070;
+                          }
+                        }
+
+                        EOF
+
+                        systemctl enable nginx
+
+                        systemctl start nginx
+
+                        systemctl reload nginx
+              - |
+
+                --+AWS+CDK+User+Data+Separator==--
     DependsOn:
       - RestateInstanceRoleDefaultPolicyD1D39538
       - RestateInstanceRoleACC59A6F
