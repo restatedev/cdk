@@ -181,6 +181,7 @@ exports[`Restate constructs Create a self-hosted Restate environment deployed on
 
                   location / {
                     proxy_pass http://localhost:9070;
+                    proxy_read_timeout 3600;
                   }
                 }
 
