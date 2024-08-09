@@ -26,7 +26,6 @@ const RESTATE_ADMIN_PORT = 9070;
 const RESTATE_IMAGE_DEFAULT = "docker.io/restatedev/restate";
 const RESTATE_DOCKER_DEFAULT_TAG = "latest";
 const ADOT_DOCKER_DEFAULT_TAG = "latest";
-const NGINX_PROXY_READ_TIMEOUT = 3600;
 
 export interface SingleNodeRestateProps {
   /** The VPC in which to launch the Restate host. */
@@ -58,7 +57,7 @@ export interface SingleNodeRestateProps {
   /**
    * The read timeout for proxyied ingress requests. Default: 3600 seconds.
    */
-  ingressProxyReadTimeout?: number;
+  ingressProxyReadTimeout?: cdk.Duration;
 
   /**
    * Completely override the default nginx configuration for the ingress proxy. Note that other
@@ -121,9 +120,8 @@ export class SingleNodeRestateDeployment extends Construct implements IRestateEn
 
     const ingressNginxConfig = this.ingressNginxConfig(props);
 
-    const restateInitCommands = ec2.UserData.forLinux();
-    restateInitCommands.addCommands(
-      "yum update -y",
+    const initScript = ec2.UserData.forLinux();
+    initScript.addCommands(
       "yum install -y docker nginx",
 
       "systemctl enable docker.service",
@@ -152,7 +150,14 @@ export class SingleNodeRestateDeployment extends Construct implements IRestateEn
       ["cat << EOF > /etc/nginx/conf.d/restate-ingress.conf", ingressNginxConfig, "EOF"].join("\n"),
       "systemctl enable nginx",
       "systemctl start nginx",
+      "systemctl reload nginx", // ensure that we reload config on subsequent reboots in case nginx was already running
     );
+
+    const cloudConfig = ec2.UserData.custom([`cloud_final_modules:`, `- [scripts-user, always]`].join("\n"));
+
+    const userData = new ec2.MultipartUserData();
+    userData.addUserDataPart(cloudConfig, "text/cloud-config");
+    userData.addUserDataPart(initScript, "text/x-shellscript");
 
     const restateInstance = new ec2.Instance(this, "Host", {
       vpc: this.vpc,
@@ -162,7 +167,7 @@ export class SingleNodeRestateDeployment extends Construct implements IRestateEn
         cpuType: ec2.AmazonLinuxCpuType.ARM_64,
       }),
       role: this.instanceRole,
-      userData: restateInitCommands,
+      userData,
     });
     this.instance = restateInstance;
 
@@ -219,7 +224,7 @@ export class SingleNodeRestateDeployment extends Construct implements IRestateEn
         "",
         "  location / {",
         `    proxy_pass http://localhost:${RESTATE_INGRESS_PORT};`,
-        `    proxy_read_timeout ${props.ingressProxyReadTimeout ?? NGINX_PROXY_READ_TIMEOUT};`,
+        `    proxy_read_timeout ${props.ingressProxyReadTimeout?.toSeconds ?? 3600};`,
         "  }",
         "}",
         "",
