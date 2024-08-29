@@ -92,6 +92,12 @@ exports[`Restate constructs Create a self-hosted Restate environment deployed on
     Type: 'AWS::EC2::Instance'
     Properties:
       AvailabilityZone: dummy1a
+      BlockDeviceMappings:
+        - DeviceName: /dev/sdd
+          Ebs:
+            DeleteOnTermination: false
+            VolumeSize: 8
+          VirtualName: restate-data
       IamInstanceProfile:
         Ref: RestateHostInstanceProfile14AE3AC8
       ImageId:
@@ -141,7 +147,34 @@ exports[`Restate constructs Create a self-hosted Restate environment deployed on
                     - - >-
                         #!/bin/bash
 
+                        set -euf -o pipefail
+
                         yum install -y docker nginx
+
+
+                        if mount | grep -qs '/var/restate'; then
+                          echo "/var/restate is mounted"
+                        else
+                          if [ -d /var/restate ]; then
+                            if [ "$(ls -A /var/restate)" ]; then
+                              echo "Data exists in /var/restate that is not on data volume; refusing to overwrite!"
+                              exit 1
+                            fi
+                          else
+                            mkdir /var/restate
+                          fi
+                          if file -sL /dev/sdd | grep -q ': data$'; then
+                            mkfs -t xfs /dev/sdd
+                          fi
+                          mount /dev/sdd /var/restate
+                          if ! grep -qs '/var/restate' /etc/fstab; then
+                            echo "/dev/sdd /var/restate xfs defaults 0 0" >> /etc/fstab
+                            echo "Added entry for /dev/sdd to /etc/fstab"
+                          else
+                            echo "Entry for /dev/sdd already exists in /etc/fstab"
+                          fi
+                        fi
+
 
                         mkdir /etc/restate
 
@@ -216,12 +249,12 @@ exports[`Restate constructs Create a self-hosted Restate environment deployed on
 
                         systemctl start docker.service
 
-                        docker run --name adot --restart unless-stopped --detach
-                        -p 4317:4317 -p 55680:55680 -p 8889:8888
+                        docker run --name adot --restart on-failure --detach -p
+                        4317:4317 -p 55680:55680 -p 8889:8888
                         public.ecr.aws/aws-observability/aws-otel-collector:latest
 
-                        docker run --name restate --restart unless-stopped
-                        --detach --volume /etc/restate:/etc/restate --volume
+                        docker run --name restate --restart on-failure --detach
+                        --volume /etc/restate:/etc/restate --volume
                         /var/restate:/restate-data --network=host -e
                         RESTATE_OBSERVABILITY__LOG__FORMAT=Json -e
                         RUST_LOG=info,restate_worker::partition=warn -e
