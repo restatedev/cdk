@@ -19,14 +19,6 @@ import { TracingMode } from "./deployments-common";
 import * as cdk from "aws-cdk-lib";
 import { RemovalPolicy } from "aws-cdk-lib";
 
-const PUBLIC_INGRESS_PORT = 443;
-const PUBLIC_ADMIN_PORT = 9073;
-const RESTATE_INGRESS_PORT = 8080;
-const RESTATE_ADMIN_PORT = 9070;
-const RESTATE_IMAGE_DEFAULT = "docker.io/restatedev/restate";
-const RESTATE_DOCKER_DEFAULT_TAG = "latest";
-const ADOT_DOCKER_DEFAULT_TAG = "latest";
-
 export interface SingleNodeRestateProps {
   /** The VPC in which to launch the Restate host. */
   vpc?: ec2.IVpc;
@@ -45,6 +37,11 @@ export interface SingleNodeRestateProps {
 
   /** Restate Docker image tag. Defaults to `latest`. */
   restateTag?: string;
+
+  /**
+   * EBS data volume settings for Restate data storage. If not specified, a default 8GB volume will be created.
+   */
+  dataVolumeOptions?: ec2.EbsDeviceProps | undefined;
 
   /** Restate high-level configuration options. Alternatively, you can set {@link restateConfigOverride}. */
   restateConfig?: {
@@ -83,6 +80,15 @@ export interface SingleNodeRestateProps {
    */
   ingressNginxConfigOverride?: string;
 }
+
+const PUBLIC_INGRESS_PORT = 443;
+const PUBLIC_ADMIN_PORT = 9073;
+const RESTATE_INGRESS_PORT = 8080;
+const RESTATE_ADMIN_PORT = 9070;
+const RESTATE_IMAGE_DEFAULT = "docker.io/restatedev/restate";
+const RESTATE_DOCKER_DEFAULT_TAG = "latest";
+const ADOT_DOCKER_DEFAULT_TAG = "latest";
+const DATA_DEVICE_NAME = "/dev/sdd";
 
 /**
  * Creates a Restate service deployment backed by a single EC2 instance, and is suitable for
@@ -140,19 +146,20 @@ export class SingleNodeRestateDeployment extends Construct implements IRestateEn
 
     const initScript = ec2.UserData.forLinux();
     initScript.addCommands(
+      "set -euf -o pipefail",
       "yum install -y docker nginx",
-
+      this.mountDataVolumeScript(),
       "mkdir /etc/restate",
-      ["cat << EOF > /etc/restate/config.toml", this.restateConfig(id, props), "EOF"].join("\n"),
+      ["cat << EOF > /etc/restate/config.toml", this.restateConfig(props), "EOF"].join("\n"),
 
       "systemctl start docker.service",
       [
-        "docker run --name adot --restart unless-stopped --detach",
+        "docker run --name adot --restart on-failure --detach",
         " -p 4317:4317 -p 55680:55680 -p 8889:8888",
         ` public.ecr.aws/aws-observability/aws-otel-collector:${adotTag}`,
       ].join(""),
       [
-        "docker run --name restate --restart unless-stopped --detach",
+        "docker run --name restate --restart on-failure --detach",
         " --volume /etc/restate:/etc/restate",
         " --volume /var/restate:/restate-data",
         " --network=host",
@@ -188,8 +195,22 @@ export class SingleNodeRestateDeployment extends Construct implements IRestateEn
         cpuType: ec2.AmazonLinuxCpuType.ARM_64,
       }),
       role: this.instanceRole,
+      blockDevices: [
+        {
+          deviceName: DATA_DEVICE_NAME,
+          volume: {
+            ebsDevice: {
+              volumeSize: 8,
+              deleteOnTermination: props.removalPolicy === RemovalPolicy.DESTROY,
+              ...(props.dataVolumeOptions ?? {}),
+            },
+            virtualName: "restate-data",
+          },
+        },
+      ],
       userData,
     });
+
     this.instance = restateInstance;
 
     // We start the ADOT collector regardless, and only control whether they will be published to X-Ray via instance
@@ -222,7 +243,7 @@ export class SingleNodeRestateDeployment extends Construct implements IRestateEn
     this.adminUrl = `https://${restateInstance.instancePublicDnsName}:${PUBLIC_ADMIN_PORT}`;
   }
 
-  protected restateConfig(id: string, props: SingleNodeRestateProps) {
+  protected restateConfig(props: SingleNodeRestateProps) {
     return (
       props.restateConfigOverride ??
       [
@@ -265,6 +286,33 @@ export class SingleNodeRestateDeployment extends Construct implements IRestateEn
         `rocksdb-statistics-level = "except-detailed-timers"`,
       ].join("\n")
     );
+  }
+
+  protected mountDataVolumeScript() {
+    return `
+if mount | grep -qs '/var/restate'; then
+  echo "/var/restate is mounted"
+else
+  if [ -d /var/restate ]; then
+    if [ "$(ls -A /var/restate)" ]; then
+      echo "Data exists in /var/restate that is not on data volume; refusing to overwrite!"
+      exit 1
+    fi
+  else
+    mkdir /var/restate
+  fi
+  if file -sL ${DATA_DEVICE_NAME} | grep -q ': data$'; then
+    mkfs -t xfs ${DATA_DEVICE_NAME}
+  fi
+  mount ${DATA_DEVICE_NAME} /var/restate
+  if ! grep -qs '/var/restate' /etc/fstab; then
+    echo "${DATA_DEVICE_NAME} /var/restate xfs defaults 0 0" >> /etc/fstab
+    echo "Added entry for ${DATA_DEVICE_NAME} to /etc/fstab"
+  else
+    echo "Entry for ${DATA_DEVICE_NAME} already exists in /etc/fstab"
+  fi
+fi
+`;
   }
 
   /**
