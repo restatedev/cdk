@@ -29,6 +29,10 @@ export interface SingleNodeRestateProps {
   /** The VPC in which to launch the Restate host. */
   vpc?: ec2.IVpc;
 
+  networkConfiguration?: {
+    subnetType?: ec2.SubnetType.PRIVATE_WITH_EGRESS | ec2.SubnetType.PUBLIC;
+  };
+
   /** Log group for Restate service logs. */
   logGroup?: logs.LogGroup;
 
@@ -109,6 +113,8 @@ export class SingleNodeRestateDeployment extends Construct implements IRestateEn
   readonly instanceRole: iam.IRole;
   readonly invokerRole: iam.IRole;
   readonly vpc: ec2.IVpc;
+  readonly ingressSecurityGroup: ec2.ISecurityGroup;
+  readonly adminSecurityGroup: ec2.ISecurityGroup;
 
   readonly ingressUrl: string;
   readonly adminUrl: string;
@@ -117,6 +123,8 @@ export class SingleNodeRestateDeployment extends Construct implements IRestateEn
     super(scope, id);
 
     this.vpc = props.vpc ?? ec2.Vpc.fromLookup(this, "Vpc", { isDefault: true });
+
+    const subnetType = props.networkConfiguration?.subnetType ?? ec2.SubnetType.PRIVATE_WITH_EGRESS;
 
     this.instanceRole = new iam.Role(this, "InstanceRole", {
       assumedBy: new iam.ServicePrincipal("ec2.amazonaws.com"),
@@ -155,7 +163,7 @@ export class SingleNodeRestateDeployment extends Construct implements IRestateEn
     const initScript = ec2.UserData.forLinux();
     initScript.addCommands(
       "set -euf -o pipefail",
-      "yum install -y docker nginx",
+      "yum install -y docker",
       this.mountDataVolumeScript(),
       "mkdir /etc/restate",
       ["cat << EOF > /etc/restate/config.toml", this.restateConfig(id, props), "EOF"].join("\n"),
@@ -177,17 +185,22 @@ export class SingleNodeRestateDeployment extends Construct implements IRestateEn
         ` ${restateImage}:${restateTag}`,
         " --config-file /etc/restate/config.toml",
       ].join(""),
-
-      "mkdir -p /etc/pki/private",
-      [
-        "openssl req -new -x509 -nodes -sha256 -days 365 -extensions v3_ca",
-        " -subj '/C=DE/ST=Berlin/L=Berlin/O=restate.dev/OU=demo/CN=restate.example.com'",
-        " -newkey rsa:2048 -keyout /etc/pki/private/restate-selfsigned.key -out /etc/pki/private/restate-selfsigned.crt",
-      ].join(""),
-
-      ["cat << EOF > /etc/nginx/conf.d/restate-ingress.conf", ingressNginxConfig, "EOF"].join("\n"),
-      "systemctl start nginx",
     );
+
+    if (subnetType == ec2.SubnetType.PUBLIC) {
+      initScript.addCommands(
+        "yum install -y nginx",
+        "mkdir -p /etc/pki/private",
+        [
+          "openssl req -new -x509 -nodes -sha256 -days 365 -extensions v3_ca",
+          " -subj '/C=DE/ST=Berlin/L=Berlin/O=restate.dev/OU=demo/CN=restate.example.com'",
+          " -newkey rsa:2048 -keyout /etc/pki/private/restate-selfsigned.key -out /etc/pki/private/restate-selfsigned.crt",
+        ].join(""),
+
+        ["cat << EOF > /etc/nginx/conf.d/restate-ingress.conf", ingressNginxConfig, "EOF"].join("\n"),
+        "systemctl start nginx",
+      );
+    }
 
     const cloudConfig = ec2.UserData.custom([`cloud_final_modules:`, `- [scripts-user, always]`].join("\n"));
 
@@ -197,7 +210,7 @@ export class SingleNodeRestateDeployment extends Construct implements IRestateEn
 
     const restateInstance = new ec2.Instance(this, "Host", {
       vpc: this.vpc,
-      vpcSubnets: { subnetType: ec2.SubnetType.PUBLIC },
+      vpcSubnets: { subnetType },
       instanceType: props.instanceType ?? new ec2.InstanceType("t4g.micro"),
       machineImage:
         props.machineImage ??
@@ -229,28 +242,54 @@ export class SingleNodeRestateDeployment extends Construct implements IRestateEn
       restateInstance.role.addManagedPolicy(iam.ManagedPolicy.fromAwsManagedPolicyName("AWSXrayWriteOnlyAccess"));
     }
 
-    const restateInstanceSecurityGroup = new ec2.SecurityGroup(this, "RestateSecurityGroup", {
+    const ingressSecurityGroup = new ec2.SecurityGroup(this, "RestateIngressSecurityGroup", {
       vpc: this.vpc,
-      securityGroupName: "RestateSecurityGroup",
-      description: "Restate service ACLs",
+      securityGroupName: "RestateIngressSecurityGroup",
+      description: "Restate Ingress ACLs",
     });
-    restateInstance.addSecurityGroup(restateInstanceSecurityGroup);
+    restateInstance.addSecurityGroup(ingressSecurityGroup);
+    const adminSecurityGroup = new ec2.SecurityGroup(this, "RestateAdminSecurityGroup", {
+      vpc: this.vpc,
+      securityGroupName: "RestateAdminSecurityGroup",
+      description: "Restate Admin ACLs",
+    });
+    restateInstance.addSecurityGroup(adminSecurityGroup);
 
-    restateInstanceSecurityGroup.addIngressRule(
-      ec2.Peer.anyIpv4(),
-      ec2.Port.tcp(PUBLIC_INGRESS_PORT),
-      "Allow traffic from anywhere to Restate ingress port",
-    );
-    restateInstanceSecurityGroup.addIngressRule(
-      ec2.Peer.anyIpv4(),
-      ec2.Port.tcp(PUBLIC_ADMIN_PORT),
-      "Allow traffic from anywhere to Restate admin port",
-    );
+    if (subnetType == ec2.SubnetType.PUBLIC) {
+      // Insecure, public-facing deployment
+      ingressSecurityGroup.addIngressRule(
+        ec2.Peer.anyIpv4(),
+        ec2.Port.tcp(PUBLIC_INGRESS_PORT),
+        "Allow traffic from anywhere to Restate ingress port",
+      );
+      ingressSecurityGroup.addIngressRule(
+        ec2.Peer.anyIpv4(),
+        ec2.Port.tcp(PUBLIC_ADMIN_PORT),
+        "Allow traffic from anywhere to Restate admin port",
+      );
 
-    this.ingressUrl = `https://${restateInstance.instancePublicDnsName}${
-      PUBLIC_INGRESS_PORT == 443 ? "" : `:${PUBLIC_INGRESS_PORT}`
-    }`;
-    this.adminUrl = `https://${restateInstance.instancePublicDnsName}:${PUBLIC_ADMIN_PORT}`;
+      this.ingressUrl =
+        `https://${restateInstance.instancePublicDnsName}` +
+        (PUBLIC_INGRESS_PORT == 443 ? "" : `:${PUBLIC_INGRESS_PORT}`);
+      this.adminUrl = `https://${restateInstance.instancePublicDnsName}:${PUBLIC_ADMIN_PORT}`;
+    } else {
+      ingressSecurityGroup.addIngressRule(
+        ingressSecurityGroup,
+        ec2.Port.tcp(RESTATE_INGRESS_PORT),
+        "Allow traffic from VPC to Restate ingress port",
+      );
+      adminSecurityGroup.addIngressRule(
+        adminSecurityGroup,
+        ec2.Port.tcp(RESTATE_ADMIN_PORT),
+        "Allow traffic from VPC to Restate admin port",
+      );
+
+      this.ingressUrl = `http://${restateInstance.instancePrivateDnsName}:${RESTATE_INGRESS_PORT}`;
+      this.adminUrl = `http://${restateInstance.instancePrivateDnsName}:${RESTATE_ADMIN_PORT}`;
+    }
+
+    this.ingressSecurityGroup = ingressSecurityGroup;
+    this.adminSecurityGroup = adminSecurityGroup;
   }
 
   protected restateConfig(id: string, props: SingleNodeRestateProps) {
