@@ -1,9 +1,9 @@
 import * as iam from "aws-cdk-lib/aws-iam";
-import { IRole } from "aws-cdk-lib/aws-iam";
-import * as secretsmanager from "aws-cdk-lib/aws-secretsmanager";
-import { ISecret } from "aws-cdk-lib/aws-secretsmanager";
+import * as secrets from "aws-cdk-lib/aws-secretsmanager";
 import { FunctionOptions } from "aws-cdk-lib/aws-lambda";
 import { ServiceDeployer } from "./service-deployer";
+import { SingleNodeRestateDeployment } from "./single-node-restate-deployment";
+import { RestateCloudEnvironment } from "./restate-cloud-environment";
 
 /**
  * A Restate environment is a unique deployment of the Restate service. Implementations of this interface may refer to
@@ -25,13 +25,18 @@ export interface IRestateEnvironment extends Pick<FunctionOptions, "vpc" | "vpcS
   /**
    * Authentication token to include as a bearer token in requests to the admin endpoint.
    */
-  readonly authToken?: secretsmanager.ISecret;
+  readonly authToken?: secrets.ISecret;
 }
 
+/**
+ * A reference to a Restate Environment that can be used as a target for deploying services. Use {@link fromAttributes}
+ * to instantiate an arbitrary pointer to an existing environment, or one of the {@link SingleNodeRestateDeployment} or
+ * {@link RestateCloudEnvironment} convenience classes.
+ */
 export class RestateEnvironment implements IRestateEnvironment {
   readonly adminUrl: string;
-  readonly authToken?: ISecret;
-  readonly invokerRole?: IRole;
+  readonly authToken?: secrets.ISecret;
+  readonly invokerRole?: iam.IRole;
   readonly serviceDeployer: ServiceDeployer;
 
   private constructor(props: IRestateEnvironment) {
