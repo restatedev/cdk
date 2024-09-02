@@ -20,6 +20,7 @@
     "postbundle": "cd dist && zip -r index.zip index.js*",
     "watch": "tsc -w",
     "test": "jest",
+    "lint": "npx prettier --check .",
     "cdk": "cdk"
   },
   "devDependencies": {
