@@ -33,9 +33,11 @@ const DEFAULT_TIMEOUT = cdk.Duration.seconds(180);
  * to be communicated to the registrar. Without this dependency, CloudFormation might perform an update deployment that
  * triggered by a Lambda handler code or configuration change, and the Restate environment would be unaware of it.
  *
- * You can share the same instance across multiple service registries provided the configuration options are compatible
+ * You can share the same deployer across multiple service registries provided the configuration options are compatible
  * (e.g. the Restate environments it needs to communicate with for deployment are all accessible via the same VPC and
- * Security Groups).
+ * Security Groups, accept the same authentication token, and so on).
+ *
+ * Deployment logs are retained for 30 days by default.
  */
 export class ServiceDeployer extends Construct {
   /** The custom resource provider for handling "deployment" resources. */
@@ -61,12 +63,7 @@ export class ServiceDeployer extends Construct {
 
     const eventHandler = new lambda_node.NodejsFunction(this, "EventHandler", {
       functionName: props?.functionName,
-      logGroup:
-        props?.logGroup ??
-        new logs.LogGroup(this, "Logs", {
-          retention: logs.RetentionDays.ONE_MONTH,
-          removalPolicy: props?.removalPolicy ?? cdk.RemovalPolicy.RETAIN_ON_UPDATE_OR_DELETE,
-        }),
+      logGroup: props?.logGroup,
       description: "Restate custom registration handler",
       entry: props?.entry ?? path.join(__dirname, "register-service-handler/index.js"),
       architecture: lambda.Architecture.ARM_64,
@@ -88,6 +85,15 @@ export class ServiceDeployer extends Construct {
           } satisfies Pick<lambda.FunctionOptions, "vpc" | "vpcSubnets" | "securityGroups">)
         : {}),
     });
+
+    if (!props?.logGroup) {
+      // By default, Lambda Functions have a log group with never-expiring retention policy.
+      new logs.LogGroup(this, "DeploymentLogs", {
+        logGroupName: `/aws/lambda/${eventHandler.functionName}`,
+        retention: logs.RetentionDays.ONE_MONTH,
+        removalPolicy: cdk.RemovalPolicy.RETAIN_ON_UPDATE_OR_DELETE,
+      });
+    }
 
     this.deploymentResourceProvider = new cr.Provider(this, "CustomResourceProvider", { onEventHandler: eventHandler });
   }

@@ -133,7 +133,7 @@ exports[`Restate constructs [Experimental] Create a self-hosted Restate environm
             - Name: RESTATE_OBSERVABILITY__LOG__FORMAT
               Value: Json
           Essential: true
-          Image: 'docker.io/restatedev/restate:latest'
+          Image: Any<Object>
           LogConfiguration:
             LogDriver: awslogs
             Options:
@@ -940,12 +940,6 @@ exports[`Restate constructs Deploy a Lambda service handler to Restate Cloud env
       - ServiceDeployerInvocationPolicyD09B639D
     UpdateReplacePolicy: Delete
     DeletionPolicy: Delete
-  ServiceDeployerLogs3856AE2C:
-    Type: 'AWS::Logs::LogGroup'
-    Properties:
-      RetentionInDays: 30
-    UpdateReplacePolicy: Retain
-    DeletionPolicy: RetainExceptOnCreate
   ServiceDeployerEventHandlerServiceRoleF133584F:
     Type: 'AWS::IAM::Role'
     Properties:
@@ -992,9 +986,6 @@ exports[`Restate constructs Deploy a Lambda service handler to Restate Cloud env
         Variables:
           NODE_OPTIONS: '--enable-source-maps'
       Handler: index.handler
-      LoggingConfig:
-        LogGroup:
-          Ref: ServiceDeployerLogs3856AE2C
       MemorySize: 128
       Role:
         'Fn::GetAtt':
@@ -1005,6 +996,17 @@ exports[`Restate constructs Deploy a Lambda service handler to Restate Cloud env
     DependsOn:
       - ServiceDeployerEventHandlerServiceRoleDefaultPolicyFE2DC3C9
       - ServiceDeployerEventHandlerServiceRoleF133584F
+  ServiceDeployerDeploymentLogs5B8BE5D2:
+    Type: 'AWS::Logs::LogGroup'
+    Properties:
+      LogGroupName:
+        'Fn::Join':
+          - ''
+          - - /aws/lambda/
+            - Ref: ServiceDeployerEventHandler89EAD25F
+      RetentionInDays: 30
+    UpdateReplacePolicy: Retain
+    DeletionPolicy: RetainExceptOnCreate
   ServiceDeployerCustomResourceProviderframeworkonEventServiceRole865AFB0C:
     Type: 'AWS::IAM::Role'
     Properties:
@@ -1197,12 +1199,6 @@ exports[`Restate constructs Deploy a Lambda service handler to existing Restate 
       - ServiceDeployerInvocationPolicyD09B639D
     UpdateReplacePolicy: Delete
     DeletionPolicy: Delete
-  ServiceDeployerLogs3856AE2C:
-    Type: 'AWS::Logs::LogGroup'
-    Properties:
-      RetentionInDays: 30
-    UpdateReplacePolicy: Retain
-    DeletionPolicy: RetainExceptOnCreate
   ServiceDeployerEventHandlerServiceRoleF133584F:
     Type: 'AWS::IAM::Role'
     Properties:
@@ -1245,9 +1241,6 @@ exports[`Restate constructs Deploy a Lambda service handler to existing Restate 
         Variables:
           NODE_OPTIONS: '--enable-source-maps'
       Handler: index.handler
-      LoggingConfig:
-        LogGroup:
-          Ref: ServiceDeployerLogs3856AE2C
       MemorySize: 128
       Role:
         'Fn::GetAtt':
@@ -1258,6 +1251,17 @@ exports[`Restate constructs Deploy a Lambda service handler to existing Restate 
     DependsOn:
       - ServiceDeployerEventHandlerServiceRoleDefaultPolicyFE2DC3C9
       - ServiceDeployerEventHandlerServiceRoleF133584F
+  ServiceDeployerDeploymentLogs5B8BE5D2:
+    Type: 'AWS::Logs::LogGroup'
+    Properties:
+      LogGroupName:
+        'Fn::Join':
+          - ''
+          - - /aws/lambda/
+            - Ref: ServiceDeployerEventHandler89EAD25F
+      RetentionInDays: 30
+    UpdateReplacePolicy: Retain
+    DeletionPolicy: RetainExceptOnCreate
   ServiceDeployerCustomResourceProviderframeworkonEventServiceRole865AFB0C:
     Type: 'AWS::IAM::Role'
     Properties:
