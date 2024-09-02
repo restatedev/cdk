@@ -690,7 +690,7 @@ exports[`Restate constructs Create a self-hosted Restate environment deployed on
 
                         node-name = "restate-0"
 
-                        cluster-name = "localcluster"
+                        cluster-name = "Restate"
 
                         allow-bootstrap = true
 
@@ -704,7 +704,7 @@ exports[`Restate constructs Create a self-hosted Restate environment deployed on
 
                         rocksdb-total-memory-size = "512 MB"
 
-                        rocksdb-total-memtables-ratio = 0.6000000238418579
+                        rocksdb-total-memtables-ratio = 0.60
 
                         rocksdb-bg-threads = 3
 

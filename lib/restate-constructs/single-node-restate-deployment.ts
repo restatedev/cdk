@@ -53,6 +53,8 @@ export interface SingleNodeRestateProps {
   restateConfig?: {
     /** Defaults to the construct id if left unspecified. */
     clusterName?: string;
+    /** Defaults to 4. Only takes effect on initial provisioning. */
+    bootstrapNumPartitions?: number;
     /** RocksDB settings. */
     rocksdb?: {
       /** Defaults to 512 MB. */
@@ -156,7 +158,7 @@ export class SingleNodeRestateDeployment extends Construct implements IRestateEn
       "yum install -y docker nginx",
       this.mountDataVolumeScript(),
       "mkdir /etc/restate",
-      ["cat << EOF > /etc/restate/config.toml", this.restateConfig(props), "EOF"].join("\n"),
+      ["cat << EOF > /etc/restate/config.toml", this.restateConfig(id, props), "EOF"].join("\n"),
 
       "systemctl start docker.service",
       [
@@ -251,7 +253,7 @@ export class SingleNodeRestateDeployment extends Construct implements IRestateEn
     this.adminUrl = `https://${restateInstance.instancePublicDnsName}:${PUBLIC_ADMIN_PORT}`;
   }
 
-  protected restateConfig(props: SingleNodeRestateProps) {
+  protected restateConfig(id: string, props: SingleNodeRestateProps) {
     return (
       props.restateConfigOverride ??
       [
@@ -261,14 +263,14 @@ export class SingleNodeRestateDeployment extends Construct implements IRestateEn
         `    "metadata-store",`,
         `]`,
         `node-name = "restate-0"`,
-        `cluster-name = "localcluster"`,
+        `cluster-name = "${props.restateConfig?.clusterName ?? id}"`,
         `allow-bootstrap = true`,
-        `bootstrap-num-partitions = 4`,
+        `bootstrap-num-partitions = ${props.restateConfig?.bootstrapNumPartitions ?? 4}`,
         `default-thread-pool-size = 3`,
         `storage-high-priority-bg-threads = 3`,
         `storage-low-priority-bg-threads = 3`,
         `rocksdb-total-memory-size = "${props.restateConfig?.rocksdb?.totalMemorySize?.toMebibytes() ?? 512.0 + " MB"}"`,
-        `rocksdb-total-memtables-ratio = 0.6000000238418579`,
+        `rocksdb-total-memtables-ratio = 0.60`,
         `rocksdb-bg-threads = 3`,
         `rocksdb-high-priority-bg-threads = 3`,
         ``,
