@@ -90,7 +90,7 @@ export interface SingleNodeRestateProps {
 }
 
 const PUBLIC_INGRESS_PORT = 443;
-const PUBLIC_ADMIN_PORT = 9073;
+const PUBLIC_ADMIN_PORT = 9070;
 const RESTATE_INGRESS_PORT = 8080;
 const RESTATE_ADMIN_PORT = 9070;
 const RESTATE_IMAGE_DEFAULT = "docker.io/restatedev/restate";
@@ -238,12 +238,12 @@ export class SingleNodeRestateDeployment extends Construct implements IRestateEn
 
     restateInstanceSecurityGroup.addIngressRule(
       ec2.Peer.anyIpv4(),
-      ec2.Port.tcp(443),
+      ec2.Port.tcp(PUBLIC_INGRESS_PORT),
       "Allow traffic from anywhere to Restate ingress port",
     );
     restateInstanceSecurityGroup.addIngressRule(
       ec2.Peer.anyIpv4(),
-      ec2.Port.tcp(9073),
+      ec2.Port.tcp(PUBLIC_ADMIN_PORT),
       "Allow traffic from anywhere to Restate admin port",
     );
 
@@ -334,8 +334,8 @@ fi
       props.ingressNginxConfigOverride ??
       [
         "server {",
-        "  listen 443 ssl http2;",
-        "  listen [::]:443 ssl http2;",
+        `  listen ${PUBLIC_INGRESS_PORT} ssl http2;`,
+        `  listen [::]:${PUBLIC_INGRESS_PORT} ssl http2;`,
         "  server_name _;",
         "  root /usr/share/nginx/html;",
         "",
@@ -353,8 +353,8 @@ fi
         "}",
         "",
         "server {",
-        "  listen 9073 ssl http2;",
-        "  listen [::]:9073 ssl http2;",
+        `  listen ${PUBLIC_ADMIN_PORT} ssl http2;`,
+        `  listen [::]:${PUBLIC_ADMIN_PORT} ssl http2;`,
         "  server_name _;",
         "  root /usr/share/nginx/html;",
         "",

@@ -797,8 +797,8 @@ exports[`Restate constructs Create a self-hosted Restate environment deployed on
 
 
                         server {
-                          listen 9073 ssl http2;
-                          listen [::]:9073 ssl http2;
+                          listen 9070 ssl http2;
+                          listen [::]:9070 ssl http2;
                           server_name _;
                           root /usr/share/nginx/html;
 
@@ -840,9 +840,9 @@ exports[`Restate constructs Create a self-hosted Restate environment deployed on
           ToPort: 443
         - CidrIp: 0.0.0.0/0
           Description: Allow traffic from anywhere to Restate admin port
-          FromPort: 9073
+          FromPort: 9070
           IpProtocol: tcp
-          ToPort: 9073
+          ToPort: 9070
       VpcId: vpc-12345
 Parameters: Any<Object>
 "
