@@ -1,6 +1,7 @@
 .idea
 *.js
 !jest.config.js
+!test/handlers/handler.js
 *.d.ts
 node_modules
 .cdk.staging

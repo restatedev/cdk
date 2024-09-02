@@ -9,7 +9,20 @@
  * https://github.com/restatedev/sdk-typescript/blob/main/LICENSE
  */
 
-export enum TracingMode {
-  DISABLED = "DISABLED",
-  AWS_XRAY = "AWS_XRAY",
-}
+"use strict";
+
+import * as restate from "@restatedev/restate-sdk/lambda";
+
+const greet = async (ctx, name) => {
+  return `Hello, ${name ?? "Restate user"}!`;
+};
+
+export const handler = restate
+  .endpoint()
+  .bind(
+    restate.service({
+      name: "Greeter",
+      handlers: { greet },
+    }),
+  )
+  .handler();
