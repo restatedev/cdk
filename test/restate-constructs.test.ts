@@ -11,6 +11,7 @@ import * as secretsmanager from "aws-cdk-lib/aws-secretsmanager";
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as route53 from "aws-cdk-lib/aws-route53";
 import "jest-cdk-snapshot";
+import { FargateRestateDeployment } from "../lib/restate-constructs/fargate-restate-deployment";
 
 describe("Restate constructs", () => {
   test("Deploy a Lambda service handler to a remote Restate environment", () => {
