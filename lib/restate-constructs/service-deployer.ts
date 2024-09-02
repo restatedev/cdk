@@ -9,15 +9,15 @@
  * https://github.com/restatedev/sdk-typescript/blob/main/LICENSE
  */
 
-import { Construct } from "constructs";
-import * as ssm from "aws-cdk-lib/aws-secretsmanager";
-import * as iam from "aws-cdk-lib/aws-iam";
-import * as lambda_node from "aws-cdk-lib/aws-lambda-nodejs";
-import { NodejsFunctionProps } from "aws-cdk-lib/aws-lambda-nodejs";
 import path from "node:path";
-import * as lambda from "aws-cdk-lib/aws-lambda";
+import { Construct } from "constructs";
 import * as cdk from "aws-cdk-lib";
 import * as cr from "aws-cdk-lib/custom-resources";
+import * as iam from "aws-cdk-lib/aws-iam";
+import * as lambda from "aws-cdk-lib/aws-lambda";
+import * as lambda_node from "aws-cdk-lib/aws-lambda-nodejs";
+import * as logs from "aws-cdk-lib/aws-logs";
+import * as secrets from "aws-cdk-lib/aws-secretsmanager";
 import { IRestateEnvironment } from "./restate-environment";
 import { RegistrationProperties } from "./register-service-handler";
 
@@ -54,13 +54,19 @@ export class ServiceDeployer extends Construct {
       lambda.FunctionOptions,
       "functionName" | "logGroup" | "timeout" | "vpc" | "vpcSubnets" | "securityGroups"
     > &
-      Pick<NodejsFunctionProps, "entry">,
+      Pick<lambda_node.NodejsFunctionProps, "entry"> &
+      Pick<logs.LogGroupProps, "removalPolicy">,
   ) {
     super(scope, id);
 
     const eventHandler = new lambda_node.NodejsFunction(this, "EventHandler", {
       functionName: props?.functionName,
-      logGroup: props?.logGroup,
+      logGroup:
+        props?.logGroup ??
+        new logs.LogGroup(this, "Logs", {
+          retention: logs.RetentionDays.ONE_MONTH,
+          removalPolicy: props?.removalPolicy ?? cdk.RemovalPolicy.RETAIN_ON_UPDATE_OR_DELETE,
+        }),
       description: "Restate custom registration handler",
       entry: props?.entry ?? path.join(__dirname, "register-service-handler/index.js"),
       architecture: lambda.Architecture.ARM_64,
@@ -101,10 +107,10 @@ export class ServiceDeployer extends Construct {
     environment: IRestateEnvironment,
     options?: {
       /**
-       * SSM secret ARN for the authentication token to use with the admin API. Takes precedence over the environment's
-       * token, if it is set.
+       * Secrets Manager secret ARN for the authentication token to use when calling the admin API. Takes precedence
+       * over the environment's token.
        */
-      authToken?: ssm.ISecret;
+      authToken?: secrets.ISecret;
       /**
        * Whether to skip granting the invoker role permission to invoke the service handler.
        */

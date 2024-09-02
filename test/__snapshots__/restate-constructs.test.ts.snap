@@ -948,6 +948,12 @@ exports[`Restate constructs Deploy a Lambda service handler to a remote Restate 
       - ServiceDeployerInvocationPolicyD09B639D
     UpdateReplacePolicy: Delete
     DeletionPolicy: Delete
+  ServiceDeployerLogs3856AE2C:
+    Type: 'AWS::Logs::LogGroup'
+    Properties:
+      RetentionInDays: 30
+    UpdateReplacePolicy: Retain
+    DeletionPolicy: RetainExceptOnCreate
   ServiceDeployerEventHandlerServiceRoleF133584F:
     Type: 'AWS::IAM::Role'
     Properties:
@@ -990,6 +996,9 @@ exports[`Restate constructs Deploy a Lambda service handler to a remote Restate 
         Variables:
           NODE_OPTIONS: '--enable-source-maps'
       Handler: index.handler
+      LoggingConfig:
+        LogGroup:
+          Ref: ServiceDeployerLogs3856AE2C
       MemorySize: 128
       Role:
         'Fn::GetAtt':

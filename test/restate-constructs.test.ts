@@ -1,10 +1,5 @@
 import * as cdk from "aws-cdk-lib";
-import {
-  FargateRestateDeployment,
-  RestateEnvironment,
-  ServiceDeployer,
-  SingleNodeRestateDeployment,
-} from "../lib/restate-constructs";
+import { RestateEnvironment, ServiceDeployer, SingleNodeRestateDeployment } from "../lib/restate-constructs";
 import { Construct } from "constructs";
 import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as secretsmanager from "aws-cdk-lib/aws-secretsmanager";
