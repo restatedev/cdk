@@ -702,7 +702,7 @@ exports[`Restate constructs Create a self-hosted Restate environment deployed on
 
                         storage-low-priority-bg-threads = 3
 
-                        rocksdb-total-memory-size = "512.0 MB"
+                        rocksdb-total-memory-size = "512 MB"
 
                         rocksdb-total-memtables-ratio = 0.6000000238418579
 

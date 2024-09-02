@@ -20,6 +20,12 @@ import * as cdk from "aws-cdk-lib";
 import { RemovalPolicy } from "aws-cdk-lib";
 
 export interface SingleNodeRestateProps {
+  /** EC2 instance type to use. */
+  instanceType?: ec2.InstanceType;
+
+  /** Machine image. */
+  machineImage?: ec2.IMachineImage;
+
   /** The VPC in which to launch the Restate host. */
   vpc?: ec2.IVpc;
 
@@ -49,8 +55,8 @@ export interface SingleNodeRestateProps {
     clusterName?: string;
     /** RocksDB settings. */
     rocksdb?: {
-      /** Defaults to `512.0 MB`. */
-      totalMemorySize?: string;
+      /** Defaults to 512 MB. */
+      totalMemorySize?: cdk.Size;
     };
   };
 
@@ -190,10 +196,12 @@ export class SingleNodeRestateDeployment extends Construct implements IRestateEn
     const restateInstance = new ec2.Instance(this, "Host", {
       vpc: this.vpc,
       vpcSubnets: { subnetType: ec2.SubnetType.PUBLIC },
-      instanceType: new ec2.InstanceType("t4g.micro"),
-      machineImage: ec2.MachineImage.latestAmazonLinux2023({
-        cpuType: ec2.AmazonLinuxCpuType.ARM_64,
-      }),
+      instanceType: props.instanceType ?? new ec2.InstanceType("t4g.micro"),
+      machineImage:
+        props.machineImage ??
+        ec2.MachineImage.latestAmazonLinux2023({
+          cpuType: ec2.AmazonLinuxCpuType.ARM_64,
+        }),
       role: this.instanceRole,
       blockDevices: [
         {
@@ -259,7 +267,7 @@ export class SingleNodeRestateDeployment extends Construct implements IRestateEn
         `default-thread-pool-size = 3`,
         `storage-high-priority-bg-threads = 3`,
         `storage-low-priority-bg-threads = 3`,
-        `rocksdb-total-memory-size = "${props.restateConfig?.rocksdb?.totalMemorySize ?? "512.0 MB"}"`,
+        `rocksdb-total-memory-size = "${props.restateConfig?.rocksdb?.totalMemorySize?.toMebibytes() ?? 512.0 + " MB"}"`,
         `rocksdb-total-memtables-ratio = 0.6000000238418579`,
         `rocksdb-bg-threads = 3`,
         `rocksdb-high-priority-bg-threads = 3`,
