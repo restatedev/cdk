@@ -258,15 +258,13 @@ export class SingleNodeRestateDeployment extends Construct implements IRestateEn
       restateInstance.role.addManagedPolicy(iam.ManagedPolicy.fromAwsManagedPolicyName("AWSXrayWriteOnlyAccess"));
     }
 
-    const ingressSecurityGroup = new ec2.SecurityGroup(this, "RestateIngressSecurityGroup", {
+    const ingressSecurityGroup = new ec2.SecurityGroup(this, "IngressSecurityGroup", {
       vpc: this.vpc,
-      securityGroupName: "RestateIngressSecurityGroup",
       description: "Restate Ingress ACLs",
     });
     restateInstance.addSecurityGroup(ingressSecurityGroup);
-    const adminSecurityGroup = new ec2.SecurityGroup(this, "RestateAdminSecurityGroup", {
+    const adminSecurityGroup = new ec2.SecurityGroup(this, "AdminSecurityGroup", {
       vpc: this.vpc,
-      securityGroupName: "RestateAdminSecurityGroup",
       description: "Restate Admin ACLs",
     });
     restateInstance.addSecurityGroup(adminSecurityGroup);
@@ -292,12 +290,12 @@ export class SingleNodeRestateDeployment extends Construct implements IRestateEn
       ingressSecurityGroup.addIngressRule(
         ingressSecurityGroup,
         ec2.Port.tcp(RESTATE_INGRESS_PORT),
-        "Allow traffic from VPC to Restate ingress port",
+        "Allow traffic to Restate ingress port",
       );
       adminSecurityGroup.addIngressRule(
         adminSecurityGroup,
         ec2.Port.tcp(RESTATE_ADMIN_PORT),
-        "Allow traffic from VPC to Restate admin port",
+        "Allow traffic to Restate admin port",
       );
 
       this.ingressUrl = `http://${restateInstance.instancePrivateDnsName}:${RESTATE_INGRESS_PORT}`;

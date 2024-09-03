@@ -611,9 +611,12 @@ exports[`Restate constructs Create a self-hosted Restate environment deployed on
             - RestateHostInstanceSecurityGroup471D630B
             - GroupId
         - 'Fn::GetAtt':
-            - RestateRestateSecurityGroup73273B13
+            - RestateIngressSecurityGroupAF84F229
             - GroupId
-      SubnetId: s-12345
+        - 'Fn::GetAtt':
+            - RestateAdminSecurityGroupA3FF2853
+            - GroupId
+      SubnetId: p-12345
       Tags:
         - Key: Name
           Value: RestateSelfHostedServerEc2Stack/Restate/Host
@@ -651,7 +654,10 @@ exports[`Restate constructs Create a self-hosted Restate environment deployed on
 
                         set -euf -o pipefail
 
-                        yum install -y docker nginx
+                        yum install -y npm && npm install -gq
+                        @restatedev/restate@latest
+
+                        yum install -y docker
 
 
                         if mount | grep -qs '/var/restate'; then
@@ -678,7 +684,7 @@ exports[`Restate constructs Create a self-hosted Restate environment deployed on
                         fi
 
 
-                        mkdir /etc/restate
+                        mkdir -p /etc/restate
 
                         cat << EOF > /etc/restate/config.toml
 
@@ -751,9 +757,15 @@ exports[`Restate constructs Create a self-hosted Restate environment deployed on
 
                         systemctl start docker.service
 
+                        if [ "$(docker ps -qa -f name=adot)" ]; then docker stop
+                        adot || true; docker rm adot; fi
+
                         docker run --name adot --restart on-failure --detach -p
                         4317:4317 -p 55680:55680 -p 8889:8888
                         public.ecr.aws/aws-observability/aws-otel-collector:latest
+
+                        if [ "$(docker ps -qa -f name=restate)" ]; then docker
+                        stop restate || true; docker rm restate; fi
 
                         docker run --name restate --restart on-failure --detach
                         --volume /etc/restate:/etc/restate --volume
@@ -763,87 +775,61 @@ exports[`Restate constructs Create a self-hosted Restate environment deployed on
                         RESTATE_OBSERVABILITY__TRACING__ENDPOINT=http://localhost:4317
                         --log-driver=awslogs --log-opt awslogs-group=
                       - Ref: RestateLogsFD86ECAE
-                      - >2-
-                         docker.io/restatedev/restate:latest --config-file /etc/restate/config.toml
-                        mkdir -p /etc/pki/private
-
-                        openssl req -new -x509 -nodes -sha256 -days 365
-                        -extensions v3_ca -subj
-                        '/C=DE/ST=Berlin/L=Berlin/O=restate.dev/OU=demo/CN=restate.example.com'
-                        -newkey rsa:2048 -keyout
-                        /etc/pki/private/restate-selfsigned.key -out
-                        /etc/pki/private/restate-selfsigned.crt
-
-                        cat << EOF > /etc/nginx/conf.d/restate-ingress.conf
-
-                        server {
-                          listen 443 ssl http2;
-                          listen [::]:443 ssl http2;
-                          server_name _;
-                          root /usr/share/nginx/html;
-
-                          ssl_certificate "/etc/pki/private/restate-selfsigned.crt";
-                          ssl_certificate_key "/etc/pki/private/restate-selfsigned.key";
-                          ssl_session_cache shared:SSL:1m;
-                          ssl_session_timeout 10m;
-                          ssl_ciphers PROFILE=SYSTEM;
-                          ssl_prefer_server_ciphers on;
-
-                          location / {
-                            proxy_pass http://localhost:8080;
-                            proxy_read_timeout 3600;
-                          }
-                        }
-
-
-                        server {
-                          listen 9070 ssl http2;
-                          listen [::]:9070 ssl http2;
-                          server_name _;
-                          root /usr/share/nginx/html;
-
-                          ssl_certificate "/etc/pki/private/restate-selfsigned.crt";
-                          ssl_certificate_key "/etc/pki/private/restate-selfsigned.key";
-                          ssl_session_cache shared:SSL:1m;
-                          ssl_session_timeout 10m;
-                          ssl_ciphers PROFILE=SYSTEM;
-                          ssl_prefer_server_ciphers on;
-
-                          location / {
-                            proxy_pass http://localhost:9070;
-                          }
-                        }
-
-                        EOF
-
-                        systemctl start nginx
+                      - ' docker.io/restatedev/restate:latest --config-file /etc/restate/config.toml'
               - |
 
                 --+AWS+CDK+User+Data+Separator==--
     DependsOn:
       - RestateInstanceRoleDefaultPolicyD1D39538
       - RestateInstanceRoleACC59A6F
-  RestateRestateSecurityGroup73273B13:
+  RestateIngressSecurityGroupAF84F229:
     Type: 'AWS::EC2::SecurityGroup'
     Properties:
-      GroupDescription: Restate service ACLs
-      GroupName: RestateSecurityGroup
+      GroupDescription: Restate Ingress ACLs
       SecurityGroupEgress:
         - CidrIp: 0.0.0.0/0
           Description: Allow all outbound traffic by default
           IpProtocol: '-1'
-      SecurityGroupIngress:
-        - CidrIp: 0.0.0.0/0
-          Description: Allow traffic from anywhere to Restate ingress port
-          FromPort: 443
-          IpProtocol: tcp
-          ToPort: 443
-        - CidrIp: 0.0.0.0/0
-          Description: Allow traffic from anywhere to Restate admin port
-          FromPort: 9070
-          IpProtocol: tcp
-          ToPort: 9070
       VpcId: vpc-12345
+  RestateIngressSecurityGroupfromRestateSelfHostedServerEc2StackRestateIngressSecurityGroup2A345A7B8080B8082F1D:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      Description: Allow traffic to Restate ingress port
+      FromPort: 8080
+      GroupId:
+        'Fn::GetAtt':
+          - RestateIngressSecurityGroupAF84F229
+          - GroupId
+      IpProtocol: tcp
+      SourceSecurityGroupId:
+        'Fn::GetAtt':
+          - RestateIngressSecurityGroupAF84F229
+          - GroupId
+      ToPort: 8080
+  RestateAdminSecurityGroupA3FF2853:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: Restate Admin ACLs
+      SecurityGroupEgress:
+        - CidrIp: 0.0.0.0/0
+          Description: Allow all outbound traffic by default
+          IpProtocol: '-1'
+      VpcId: vpc-12345
+  RestateAdminSecurityGroupfromRestateSelfHostedServerEc2StackRestateAdminSecurityGroupFC96B1BB9070F9F6DD3D:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      Description: Allow traffic to Restate admin port
+      FromPort: 9070
+      GroupId:
+        'Fn::GetAtt':
+          - RestateAdminSecurityGroupA3FF2853
+          - GroupId
+      IpProtocol: tcp
+      SourceSecurityGroupId:
+        'Fn::GetAtt':
+          - RestateAdminSecurityGroupA3FF2853
+          - GroupId
+      ToPort: 9070
 Parameters: Any<Object>
 "
 `;
