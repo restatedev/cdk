@@ -6,9 +6,9 @@ import "source-map-support/register";
 import { ServiceDeployer, SingleNodeRestateDeployment } from "../../lib/restate-constructs";
 import * as ec2 from "aws-cdk-lib/aws-ec2";
 
-// Deploy with: npx cdk --app 'npx tsx single-node-ec2.e2e.ts' deploy
+// Deploy with: npx cdk --app 'npx tsx single-node-ec2.e2e.ts' deploy --context vpc_id=...
 const app = new cdk.App();
-const stack = new cdk.Stack(app, "e2e-RestateSingleNodeEc2", {
+const stack = new cdk.Stack(app, "e2e-RestateSingleNodeEc2Lite", {
   env: {
     account: process.env.CDK_DEFAULT_ACCOUNT,
     region: process.env.CDK_DEFAULT_REGION,
@@ -21,7 +21,7 @@ const handler: lambda.Function = new lambda.Function(stack, "Service", {
   handler: "bundle.handler",
 });
 
-const vpc = ec2.Vpc.fromLookup(stack, "Vpc", { vpcId: "vpc-0d2e373fed47934f3" });
+const vpc = ec2.Vpc.fromLookup(stack, "Vpc", { vpcId: app.node.getContext("vpc_id") });
 
 const environment = new SingleNodeRestateDeployment(stack, "Restate", {
   vpc,
