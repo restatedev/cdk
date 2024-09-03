@@ -20,6 +20,8 @@ npm i @restatedev/restate-cdk
 
 ## Available constructs
 
+- [`RestateCloudEnvironment`](./lib/restate-constructs/restate-cloud-environment.ts) - Supports deploying Restate
+  services to an existing [Restate Cloud](https://cloud.restate.dev) environment.
 - [`SingleNodeRestateDeployment`](./lib/restate-constructs/single-node-restate-deployment.ts) - Deploys a self-hosted
   Restate server running on Amazon EC2; this provides a basic single-node deployment targeted at development and testing
 - [`ServiceDeployer`](./lib/restate-constructs/service-deployer.ts) - facilitates registration of Lambda-based service
