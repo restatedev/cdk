@@ -23,13 +23,25 @@ export interface SingleNodeRestateProps {
   /** EC2 instance type to use. */
   instanceType?: ec2.InstanceType;
 
-  /** Machine image. */
+  /** Machine image. Note: startup script expects yum-based package management. */
   machineImage?: ec2.IMachineImage;
 
   /** The VPC in which to launch the Restate host. */
   vpc?: ec2.IVpc;
 
   networkConfiguration?: {
+    /**
+     * Subnet type for the Restate host.
+     *
+     * Available options:
+     *  - [Default] {@link ec2.SubnetType.PRIVATE_WITH_EGRESS} will create the Restate instance with outbound internet
+     *    access only, so that it can invoke HTTP endpoints. The security groups {@link ingressSecurityGroup} and
+     *    {@link adminSecurityGroup} control inbound traffic to the service ingress and admin ports respectively.
+     *    Configure {@link ServiceDeployer} to use the latter, and set up ingress traffic routing outside of this
+     *    construct using the former.
+     *  - Insecure, internet-facing {@link ec2.SubnetType.PUBLIC} will also provision an nginx reverse proxy
+     *    and an HTTP listener with a self-signed certificate.
+     */
     subnetType?: ec2.SubnetType.PRIVATE_WITH_EGRESS | ec2.SubnetType.PUBLIC;
   };
 
@@ -103,10 +115,10 @@ const ADOT_DOCKER_DEFAULT_TAG = "latest";
 const DATA_DEVICE_NAME = "/dev/sdd";
 
 /**
- * Creates a Restate service deployment backed by a single EC2 instance, and is suitable for
- * development and testing purposes.
+ * Creates a Restate service deployment backed by a single EC2 instance, suitable for development and testing purposes.
+ *
  * The EC2 instance will be created in the default VPC unless otherwise specified.
- * The instance will be assigned a public IP address.
+ * See {@link SingleNodeRestateProps} for available configuration options.
  */
 export class SingleNodeRestateDeployment extends Construct implements IRestateEnvironment {
   readonly instance: ec2.Instance;
@@ -163,28 +175,32 @@ export class SingleNodeRestateDeployment extends Construct implements IRestateEn
     const initScript = ec2.UserData.forLinux();
     initScript.addCommands(
       "set -euf -o pipefail",
+      `yum install -y npm && npm install -gq @restatedev/restate@${restateTag}`,
       "yum install -y docker",
       this.mountDataVolumeScript(),
-      "mkdir /etc/restate",
+
+      "mkdir -p /etc/restate",
       ["cat << EOF > /etc/restate/config.toml", this.restateConfig(id, props), "EOF"].join("\n"),
 
       "systemctl start docker.service",
-      [
-        "docker run --name adot --restart on-failure --detach",
-        " -p 4317:4317 -p 55680:55680 -p 8889:8888",
+
+      // Start the ADOT collector - needed for X-ray trace forwarding
+      `if [ "$(docker ps -qa -f name=adot)" ]; then docker stop adot || true; docker rm adot; fi`,
+      "docker run --name adot --restart on-failure --detach" +
+        " -p 4317:4317 -p 55680:55680 -p 8889:8888" +
         ` public.ecr.aws/aws-observability/aws-otel-collector:${adotTag}`,
-      ].join(""),
-      [
-        "docker run --name restate --restart on-failure --detach",
-        " --volume /etc/restate:/etc/restate",
-        " --volume /var/restate:/restate-data",
-        " --network=host",
-        " -e RESTATE_OBSERVABILITY__LOG__FORMAT=Json -e RUST_LOG=info,restate_worker::partition=warn",
-        " -e RESTATE_OBSERVABILITY__TRACING__ENDPOINT=http://localhost:4317",
-        ` --log-driver=awslogs --log-opt awslogs-group=${logGroup.logGroupName}`,
-        ` ${restateImage}:${restateTag}`,
+
+      // Start the Restate server container
+      `if [ "$(docker ps -qa -f name=restate)" ]; then docker stop restate || true; docker rm restate; fi`,
+      "docker run --name restate --restart on-failure --detach" +
+        " --volume /etc/restate:/etc/restate" +
+        " --volume /var/restate:/restate-data" +
+        " --network=host" +
+        " -e RESTATE_OBSERVABILITY__LOG__FORMAT=Json -e RUST_LOG=info,restate_worker::partition=warn" +
+        " -e RESTATE_OBSERVABILITY__TRACING__ENDPOINT=http://localhost:4317" +
+        ` --log-driver=awslogs --log-opt awslogs-group=${logGroup.logGroupName}` +
+        ` ${restateImage}:${restateTag}` +
         " --config-file /etc/restate/config.toml",
-      ].join(""),
     );
 
     if (subnetType == ec2.SubnetType.PUBLIC) {
