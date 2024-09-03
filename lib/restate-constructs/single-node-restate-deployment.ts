@@ -23,11 +23,27 @@ export interface SingleNodeRestateProps {
   /** EC2 instance type to use. */
   instanceType?: ec2.InstanceType;
 
-  /** Machine image. */
+  /** Machine image. Note: startup script expects yum-based package management. */
   machineImage?: ec2.IMachineImage;
 
   /** The VPC in which to launch the Restate host. */
   vpc?: ec2.IVpc;
+
+  networkConfiguration?: {
+    /**
+     * Subnet type for the Restate host.
+     *
+     * Available options:
+     *  - [Default] {@link ec2.SubnetType.PRIVATE_WITH_EGRESS} will create the Restate instance with outbound internet
+     *    access only, so that it can invoke HTTP endpoints. The security groups {@link ingressSecurityGroup} and
+     *    {@link adminSecurityGroup} control inbound traffic to the service ingress and admin ports respectively.
+     *    Configure {@link ServiceDeployer} to use the latter, and set up ingress traffic routing outside of this
+     *    construct using the former.
+     *  - Insecure, internet-facing {@link ec2.SubnetType.PUBLIC} will also provision an nginx reverse proxy
+     *    and an HTTP listener with a self-signed certificate.
+     */
+    subnetType?: ec2.SubnetType.PRIVATE_WITH_EGRESS | ec2.SubnetType.PUBLIC;
+  };
 
   /** Log group for Restate service logs. */
   logGroup?: logs.LogGroup;
@@ -90,7 +106,7 @@ export interface SingleNodeRestateProps {
 }
 
 const PUBLIC_INGRESS_PORT = 443;
-const PUBLIC_ADMIN_PORT = 9073;
+const PUBLIC_ADMIN_PORT = 9070;
 const RESTATE_INGRESS_PORT = 8080;
 const RESTATE_ADMIN_PORT = 9070;
 const RESTATE_IMAGE_DEFAULT = "docker.io/restatedev/restate";
@@ -99,16 +115,18 @@ const ADOT_DOCKER_DEFAULT_TAG = "latest";
 const DATA_DEVICE_NAME = "/dev/sdd";
 
 /**
- * Creates a Restate service deployment backed by a single EC2 instance, and is suitable for
- * development and testing purposes.
+ * Creates a Restate service deployment backed by a single EC2 instance, suitable for development and testing purposes.
+ *
  * The EC2 instance will be created in the default VPC unless otherwise specified.
- * The instance will be assigned a public IP address.
+ * See {@link SingleNodeRestateProps} for available configuration options.
  */
 export class SingleNodeRestateDeployment extends Construct implements IRestateEnvironment {
   readonly instance: ec2.Instance;
   readonly instanceRole: iam.IRole;
   readonly invokerRole: iam.IRole;
   readonly vpc: ec2.IVpc;
+  readonly ingressSecurityGroup: ec2.ISecurityGroup;
+  readonly adminSecurityGroup: ec2.ISecurityGroup;
 
   readonly ingressUrl: string;
   readonly adminUrl: string;
@@ -117,6 +135,8 @@ export class SingleNodeRestateDeployment extends Construct implements IRestateEn
     super(scope, id);
 
     this.vpc = props.vpc ?? ec2.Vpc.fromLookup(this, "Vpc", { isDefault: true });
+
+    const subnetType = props.networkConfiguration?.subnetType ?? ec2.SubnetType.PRIVATE_WITH_EGRESS;
 
     this.instanceRole = new iam.Role(this, "InstanceRole", {
       assumedBy: new iam.ServicePrincipal("ec2.amazonaws.com"),
@@ -155,39 +175,48 @@ export class SingleNodeRestateDeployment extends Construct implements IRestateEn
     const initScript = ec2.UserData.forLinux();
     initScript.addCommands(
       "set -euf -o pipefail",
-      "yum install -y docker nginx",
+      `yum install -y npm && npm install -gq @restatedev/restate@${restateTag}`,
+      "yum install -y docker",
       this.mountDataVolumeScript(),
-      "mkdir /etc/restate",
+
+      "mkdir -p /etc/restate",
       ["cat << EOF > /etc/restate/config.toml", this.restateConfig(id, props), "EOF"].join("\n"),
 
       "systemctl start docker.service",
-      [
-        "docker run --name adot --restart on-failure --detach",
-        " -p 4317:4317 -p 55680:55680 -p 8889:8888",
+
+      // Start the ADOT collector - needed for X-ray trace forwarding
+      `if [ "$(docker ps -qa -f name=adot)" ]; then docker stop adot || true; docker rm adot; fi`,
+      "docker run --name adot --restart on-failure --detach" +
+        " -p 4317:4317 -p 55680:55680 -p 8889:8888" +
         ` public.ecr.aws/aws-observability/aws-otel-collector:${adotTag}`,
-      ].join(""),
-      [
-        "docker run --name restate --restart on-failure --detach",
-        " --volume /etc/restate:/etc/restate",
-        " --volume /var/restate:/restate-data",
-        " --network=host",
-        " -e RESTATE_OBSERVABILITY__LOG__FORMAT=Json -e RUST_LOG=info,restate_worker::partition=warn",
-        " -e RESTATE_OBSERVABILITY__TRACING__ENDPOINT=http://localhost:4317",
-        ` --log-driver=awslogs --log-opt awslogs-group=${logGroup.logGroupName}`,
-        ` ${restateImage}:${restateTag}`,
+
+      // Start the Restate server container
+      `if [ "$(docker ps -qa -f name=restate)" ]; then docker stop restate || true; docker rm restate; fi`,
+      "docker run --name restate --restart on-failure --detach" +
+        " --volume /etc/restate:/etc/restate" +
+        " --volume /var/restate:/restate-data" +
+        " --network=host" +
+        " -e RESTATE_OBSERVABILITY__LOG__FORMAT=Json -e RUST_LOG=info,restate_worker::partition=warn" +
+        " -e RESTATE_OBSERVABILITY__TRACING__ENDPOINT=http://localhost:4317" +
+        ` --log-driver=awslogs --log-opt awslogs-group=${logGroup.logGroupName}` +
+        ` ${restateImage}:${restateTag}` +
         " --config-file /etc/restate/config.toml",
-      ].join(""),
-
-      "mkdir -p /etc/pki/private",
-      [
-        "openssl req -new -x509 -nodes -sha256 -days 365 -extensions v3_ca",
-        " -subj '/C=DE/ST=Berlin/L=Berlin/O=restate.dev/OU=demo/CN=restate.example.com'",
-        " -newkey rsa:2048 -keyout /etc/pki/private/restate-selfsigned.key -out /etc/pki/private/restate-selfsigned.crt",
-      ].join(""),
-
-      ["cat << EOF > /etc/nginx/conf.d/restate-ingress.conf", ingressNginxConfig, "EOF"].join("\n"),
-      "systemctl start nginx",
     );
+
+    if (subnetType == ec2.SubnetType.PUBLIC) {
+      initScript.addCommands(
+        "yum install -y nginx",
+        "mkdir -p /etc/pki/private",
+        [
+          "openssl req -new -x509 -nodes -sha256 -days 365 -extensions v3_ca",
+          " -subj '/C=DE/ST=Berlin/L=Berlin/O=restate.dev/OU=demo/CN=restate.example.com'",
+          " -newkey rsa:2048 -keyout /etc/pki/private/restate-selfsigned.key -out /etc/pki/private/restate-selfsigned.crt",
+        ].join(""),
+
+        ["cat << EOF > /etc/nginx/conf.d/restate-ingress.conf", ingressNginxConfig, "EOF"].join("\n"),
+        "systemctl start nginx",
+      );
+    }
 
     const cloudConfig = ec2.UserData.custom([`cloud_final_modules:`, `- [scripts-user, always]`].join("\n"));
 
@@ -197,7 +226,7 @@ export class SingleNodeRestateDeployment extends Construct implements IRestateEn
 
     const restateInstance = new ec2.Instance(this, "Host", {
       vpc: this.vpc,
-      vpcSubnets: { subnetType: ec2.SubnetType.PUBLIC },
+      vpcSubnets: { subnetType },
       instanceType: props.instanceType ?? new ec2.InstanceType("t4g.micro"),
       machineImage:
         props.machineImage ??
@@ -229,28 +258,52 @@ export class SingleNodeRestateDeployment extends Construct implements IRestateEn
       restateInstance.role.addManagedPolicy(iam.ManagedPolicy.fromAwsManagedPolicyName("AWSXrayWriteOnlyAccess"));
     }
 
-    const restateInstanceSecurityGroup = new ec2.SecurityGroup(this, "RestateSecurityGroup", {
+    const ingressSecurityGroup = new ec2.SecurityGroup(this, "IngressSecurityGroup", {
       vpc: this.vpc,
-      securityGroupName: "RestateSecurityGroup",
-      description: "Restate service ACLs",
+      description: "Restate Ingress ACLs",
     });
-    restateInstance.addSecurityGroup(restateInstanceSecurityGroup);
+    restateInstance.addSecurityGroup(ingressSecurityGroup);
+    const adminSecurityGroup = new ec2.SecurityGroup(this, "AdminSecurityGroup", {
+      vpc: this.vpc,
+      description: "Restate Admin ACLs",
+    });
+    restateInstance.addSecurityGroup(adminSecurityGroup);
 
-    restateInstanceSecurityGroup.addIngressRule(
-      ec2.Peer.anyIpv4(),
-      ec2.Port.tcp(443),
-      "Allow traffic from anywhere to Restate ingress port",
-    );
-    restateInstanceSecurityGroup.addIngressRule(
-      ec2.Peer.anyIpv4(),
-      ec2.Port.tcp(9073),
-      "Allow traffic from anywhere to Restate admin port",
-    );
+    if (subnetType == ec2.SubnetType.PUBLIC) {
+      // Insecure, public-facing deployment
+      ingressSecurityGroup.addIngressRule(
+        ec2.Peer.anyIpv4(),
+        ec2.Port.tcp(PUBLIC_INGRESS_PORT),
+        "Allow traffic from anywhere to Restate ingress port",
+      );
+      ingressSecurityGroup.addIngressRule(
+        ec2.Peer.anyIpv4(),
+        ec2.Port.tcp(PUBLIC_ADMIN_PORT),
+        "Allow traffic from anywhere to Restate admin port",
+      );
 
-    this.ingressUrl = `https://${restateInstance.instancePublicDnsName}${
-      PUBLIC_INGRESS_PORT == 443 ? "" : `:${PUBLIC_INGRESS_PORT}`
-    }`;
-    this.adminUrl = `https://${restateInstance.instancePublicDnsName}:${PUBLIC_ADMIN_PORT}`;
+      this.ingressUrl =
+        `https://${restateInstance.instancePublicDnsName}` +
+        (PUBLIC_INGRESS_PORT == 443 ? "" : `:${PUBLIC_INGRESS_PORT}`);
+      this.adminUrl = `https://${restateInstance.instancePublicDnsName}:${PUBLIC_ADMIN_PORT}`;
+    } else {
+      ingressSecurityGroup.addIngressRule(
+        ingressSecurityGroup,
+        ec2.Port.tcp(RESTATE_INGRESS_PORT),
+        "Allow traffic to Restate ingress port",
+      );
+      adminSecurityGroup.addIngressRule(
+        adminSecurityGroup,
+        ec2.Port.tcp(RESTATE_ADMIN_PORT),
+        "Allow traffic to Restate admin port",
+      );
+
+      this.ingressUrl = `http://${restateInstance.instancePrivateDnsName}:${RESTATE_INGRESS_PORT}`;
+      this.adminUrl = `http://${restateInstance.instancePrivateDnsName}:${RESTATE_ADMIN_PORT}`;
+    }
+
+    this.ingressSecurityGroup = ingressSecurityGroup;
+    this.adminSecurityGroup = adminSecurityGroup;
   }
 
   protected restateConfig(id: string, props: SingleNodeRestateProps) {
@@ -334,8 +387,8 @@ fi
       props.ingressNginxConfigOverride ??
       [
         "server {",
-        "  listen 443 ssl http2;",
-        "  listen [::]:443 ssl http2;",
+        `  listen ${PUBLIC_INGRESS_PORT} ssl http2;`,
+        `  listen [::]:${PUBLIC_INGRESS_PORT} ssl http2;`,
         "  server_name _;",
         "  root /usr/share/nginx/html;",
         "",
@@ -353,8 +406,8 @@ fi
         "}",
         "",
         "server {",
-        "  listen 9073 ssl http2;",
-        "  listen [::]:9073 ssl http2;",
+        `  listen ${PUBLIC_ADMIN_PORT} ssl http2;`,
+        `  listen [::]:${PUBLIC_ADMIN_PORT} ssl http2;`,
         "  server_name _;",
         "  root /usr/share/nginx/html;",
         "",
