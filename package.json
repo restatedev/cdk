@@ -1,7 +1,7 @@
 {
   "name": "@restatedev/restate-cdk",
   "description": "Restate.dev CDK constructs",
-  "version": "1.0.1",
+  "version": "1.1.0-rc.1",
   "author": "Restate Developers",
   "license": "MIT",
   "email": "code@restate.dev",
@@ -16,6 +16,7 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc --noEmitOnError",
+    "check": "npm run build && npm run lint && npm run test",
     "prebundle": "rm -rf dist",
     "postbundle": "cd dist && zip -r index.zip index.js*",
     "watch": "tsc -w",
