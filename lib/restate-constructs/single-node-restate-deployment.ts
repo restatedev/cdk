@@ -276,7 +276,7 @@ export class SingleNodeRestateDeployment extends Construct implements IRestateEn
         ec2.Port.tcp(PUBLIC_INGRESS_PORT),
         "Allow traffic from anywhere to Restate ingress port",
       );
-      ingressSecurityGroup.addIngressRule(
+      adminSecurityGroup.addIngressRule(
         ec2.Peer.anyIpv4(),
         ec2.Port.tcp(PUBLIC_ADMIN_PORT),
         "Allow traffic from anywhere to Restate admin port",
