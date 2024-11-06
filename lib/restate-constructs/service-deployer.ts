@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023 - Restate Software, Inc., Restate GmbH
+ * Copyright (c) 2023-2024 - Restate Software, Inc., Restate GmbH
  *
  * This file is part of the Restate SDK for Node.js/TypeScript,
  * which is released under the MIT license.
@@ -54,7 +54,7 @@ export class ServiceDeployer extends Construct {
      */
     props?: Pick<
       lambda.FunctionOptions,
-      "functionName" | "logGroup" | "timeout" | "vpc" | "vpcSubnets" | "securityGroups"
+      "functionName" | "logGroup" | "timeout" | "vpc" | "vpcSubnets" | "securityGroups" | "allowPublicSubnet"
     > &
       Pick<lambda_node.NodejsFunctionProps, "entry"> &
       Pick<logs.LogGroupProps, "removalPolicy">,
@@ -84,6 +84,7 @@ export class ServiceDeployer extends Construct {
             securityGroups: props?.securityGroups,
           } satisfies Pick<lambda.FunctionOptions, "vpc" | "vpcSubnets" | "securityGroups">)
         : {}),
+      allowPublicSubnet: props?.allowPublicSubnet,
     });
 
     if (!props?.logGroup) {
@@ -136,6 +137,10 @@ export class ServiceDeployer extends Construct {
        * Whether to accept self-signed certificates.
        */
       insecure?: boolean;
+      /**
+       * Specify a custom admin endpoint URL, overriding the one exposed by the target environment.
+       */
+      adminUrl?: string;
     },
   ) {
     const authToken = options?.authToken ?? environment.authToken;
@@ -146,7 +151,7 @@ export class ServiceDeployer extends Construct {
       resourceType: "Custom::RestateServiceDeployment",
       properties: {
         servicePath: serviceName,
-        adminUrl: environment.adminUrl,
+        adminUrl: options?.adminUrl ?? environment.adminUrl,
         authTokenSecretArn: authToken?.secretArn,
         serviceLambdaArn: handler.functionArn,
         invokeRoleArn: environment.invokerRole?.roleArn,

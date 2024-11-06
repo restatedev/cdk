@@ -502,7 +502,7 @@ exports[`Restate constructs [Experimental] Create a self-hosted Restate environm
 "
 `;
 
-exports[`Restate constructs Create a self-hosted Restate environment deployed on EC2 1`] = `
+exports[`Restate constructs Create a self-hosted Restate environment deployed on EC2 (TLS termination) 1`] = `
 "Resources:
   RestateInstanceRoleACC59A6F:
     Type: 'AWS::IAM::Role'
@@ -731,6 +731,11 @@ exports[`Restate constructs Create a self-hosted Restate environment deployed on
                         num-partitions-to-share-memory-budget = 4
 
 
+                        [admin]
+
+                        bind-address = "127.0.0.1:9070"
+
+
                         [admin.query-engine]
 
                         memory-size = "50.0 MB"
@@ -739,6 +744,8 @@ exports[`Restate constructs Create a self-hosted Restate environment deployed on
 
 
                         [ingress]
+
+                        bind-address = "127.0.0.1:8080"
 
                         rocksdb-max-background-jobs = 3
 
@@ -791,10 +798,349 @@ exports[`Restate constructs Create a self-hosted Restate environment deployed on
           Description: Allow all outbound traffic by default
           IpProtocol: '-1'
       VpcId: vpc-12345
+  RestateIngressSecurityGroupfromRestateSelfHostedServerEc2StackRestateIngressSecurityGroup2A345A7B443DDD57F2A:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      Description: Restate ingress
+      FromPort: 443
+      GroupId:
+        'Fn::GetAtt':
+          - RestateIngressSecurityGroupAF84F229
+          - GroupId
+      IpProtocol: tcp
+      SourceSecurityGroupId:
+        'Fn::GetAtt':
+          - RestateIngressSecurityGroupAF84F229
+          - GroupId
+      ToPort: 443
+  RestateAdminSecurityGroupA3FF2853:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: Restate Admin ACLs
+      SecurityGroupEgress:
+        - CidrIp: 0.0.0.0/0
+          Description: Allow all outbound traffic by default
+          IpProtocol: '-1'
+      VpcId: vpc-12345
+  RestateAdminSecurityGroupfromRestateSelfHostedServerEc2StackRestateAdminSecurityGroupFC96B1BB907362FDE390:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      Description: Restate admin
+      FromPort: 9073
+      GroupId:
+        'Fn::GetAtt':
+          - RestateAdminSecurityGroupA3FF2853
+          - GroupId
+      IpProtocol: tcp
+      SourceSecurityGroupId:
+        'Fn::GetAtt':
+          - RestateAdminSecurityGroupA3FF2853
+          - GroupId
+      ToPort: 9073
+Parameters: Any<Object>
+"
+`;
+
+exports[`Restate constructs Create a self-hosted Restate environment deployed on EC2 1`] = `
+"Resources:
+  RestateInstanceRoleACC59A6F:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: 'sts:AssumeRole'
+            Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+        Version: '2012-10-17'
+      ManagedPolicyArns:
+        - 'Fn::Join':
+            - ''
+            - - 'arn:'
+              - Ref: 'AWS::Partition'
+              - ':iam::aws:policy/AmazonSSMManagedInstanceCore'
+  RestateInstanceRoleDefaultPolicyD1D39538:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyDocument:
+        Statement:
+          - Action:
+              - 'logs:CreateLogStream'
+              - 'logs:PutLogEvents'
+            Effect: Allow
+            Resource:
+              'Fn::GetAtt':
+                - RestateLogsFD86ECAE
+                - Arn
+        Version: '2012-10-17'
+      PolicyName: RestateInstanceRoleDefaultPolicyD1D39538
+      Roles:
+        - Ref: RestateInstanceRoleACC59A6F
+  RestateInvokerRole42565598:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: 'sts:AssumeRole'
+            Effect: Allow
+            Principal:
+              AWS:
+                'Fn::GetAtt':
+                  - RestateInstanceRoleACC59A6F
+                  - Arn
+        Version: '2012-10-17'
+  RestateAssumeInvokerRolePolicy1FA6B6C2:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyDocument:
+        Statement:
+          - Action: 'sts:AssumeRole'
+            Effect: Allow
+            Resource:
+              'Fn::GetAtt':
+                - RestateInvokerRole42565598
+                - Arn
+            Sid: AllowAssumeInvokerRole
+        Version: '2012-10-17'
+      PolicyName: RestateAssumeInvokerRolePolicy1FA6B6C2
+      Roles:
+        - Ref: RestateInstanceRoleACC59A6F
+  RestateLogsFD86ECAE:
+    Type: 'AWS::Logs::LogGroup'
+    Properties:
+      LogGroupName: /restate/Restate
+      RetentionInDays: 30
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+  RestateHostInstanceSecurityGroup471D630B:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: RestateSelfHostedServerEc2Stack/Restate/Host/InstanceSecurityGroup
+      SecurityGroupEgress:
+        - CidrIp: 0.0.0.0/0
+          Description: Allow all outbound traffic by default
+          IpProtocol: '-1'
+      Tags:
+        - Key: Name
+          Value: RestateSelfHostedServerEc2Stack/Restate/Host
+      VpcId: vpc-12345
+  RestateHostInstanceProfile14AE3AC8:
+    Type: 'AWS::IAM::InstanceProfile'
+    Properties:
+      Roles:
+        - Ref: RestateInstanceRoleACC59A6F
+  RestateHost1AC4F9D1:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      AvailabilityZone: dummy1a
+      BlockDeviceMappings:
+        - DeviceName: /dev/sdd
+          Ebs:
+            DeleteOnTermination: false
+            VolumeSize: 8
+          VirtualName: restate-data
+      IamInstanceProfile:
+        Ref: RestateHostInstanceProfile14AE3AC8
+      ImageId:
+        Ref: >-
+          SsmParameterValueawsserviceamiamazonlinuxlatestal2023amikernel61arm64C96584B6F00A464EAD1953AFF4B05118Parameter
+      InstanceType: t4g.micro
+      SecurityGroupIds:
+        - 'Fn::GetAtt':
+            - RestateHostInstanceSecurityGroup471D630B
+            - GroupId
+        - 'Fn::GetAtt':
+            - RestateIngressSecurityGroupAF84F229
+            - GroupId
+        - 'Fn::GetAtt':
+            - RestateAdminSecurityGroupA3FF2853
+            - GroupId
+      SubnetId: p-12345
+      Tags:
+        - Key: Name
+          Value: RestateSelfHostedServerEc2Stack/Restate/Host
+      UserData:
+        'Fn::Base64':
+          'Fn::Join':
+            - ''
+            - - >+
+                Content-Type: multipart/mixed;
+                boundary="+AWS+CDK+User+Data+Separator=="
+
+                MIME-Version: 1.0
+
+
+                --+AWS+CDK+User+Data+Separator==
+
+                Content-Type: text/cloud-config
+
+                Content-Transfer-Encoding: base64
+
+              - 'Fn::Base64': |-
+                  cloud_final_modules:
+                  - [scripts-user, always]
+              - |+
+
+                --+AWS+CDK+User+Data+Separator==
+                Content-Type: text/x-shellscript
+                Content-Transfer-Encoding: base64
+
+              - 'Fn::Base64':
+                  'Fn::Join':
+                    - ''
+                    - - >-
+                        #!/bin/bash
+
+                        set -euf -o pipefail
+
+                        yum install -y npm && npm install -gq
+                        @restatedev/restate@custom-version
+
+                        yum install -y docker
+
+
+                        if mount | grep -qs '/var/restate'; then
+                          echo "/var/restate is mounted"
+                        else
+                          if [ -d /var/restate ]; then
+                            if [ "$(ls -A /var/restate)" ]; then
+                              echo "Data exists in /var/restate that is not on data volume; refusing to overwrite!"
+                              exit 1
+                            fi
+                          else
+                            mkdir /var/restate
+                          fi
+                          if file -sL /dev/sdd | grep -q ': data$'; then
+                            mkfs -t xfs /dev/sdd
+                          fi
+                          mount /dev/sdd /var/restate
+                          if ! grep -qs '/var/restate' /etc/fstab; then
+                            echo "/dev/sdd /var/restate xfs defaults 0 0" >> /etc/fstab
+                            echo "Added entry for /dev/sdd to /etc/fstab"
+                          else
+                            echo "Entry for /dev/sdd already exists in /etc/fstab"
+                          fi
+                        fi
+
+
+                        mkdir -p /etc/restate
+
+                        cat << EOF > /etc/restate/config.toml
+
+                        roles = [
+                            "worker",
+                            "admin",
+                            "metadata-store",
+                        ]
+
+                        node-name = "restate-0"
+
+                        cluster-name = "Restate"
+
+                        allow-bootstrap = true
+
+                        bootstrap-num-partitions = 4
+
+                        default-thread-pool-size = 3
+
+                        storage-high-priority-bg-threads = 3
+
+                        storage-low-priority-bg-threads = 3
+
+                        rocksdb-total-memory-size = "512 MB"
+
+                        rocksdb-total-memtables-ratio = 0.60
+
+                        rocksdb-bg-threads = 3
+
+                        rocksdb-high-priority-bg-threads = 3
+
+
+                        [worker]
+
+                        internal-queue-length = 1000
+
+
+                        [worker.storage]
+
+                        rocksdb-max-background-jobs = 3
+
+                        rocksdb-statistics-level = "except-detailed-timers"
+
+                        num-partitions-to-share-memory-budget = 4
+
+
+                        [admin]
+
+                        bind-address = "0.0.0.0:9070"
+
+
+                        [admin.query-engine]
+
+                        memory-size = "50.0 MB"
+
+                        query-parallelism = 4
+
+
+                        [ingress]
+
+                        bind-address = "0.0.0.0:8080"
+
+                        rocksdb-max-background-jobs = 3
+
+                        rocksdb-statistics-level = "except-detailed-timers"
+
+                        writer-batch-commit-count = 1000
+
+
+                        [metadata-store.rocksdb]
+
+                        rocksdb-max-background-jobs = 1
+
+                        rocksdb-statistics-level = "except-detailed-timers"
+
+                        EOF
+
+                        systemctl start docker.service
+
+                        if [ "$(docker ps -qa -f name=adot)" ]; then docker stop
+                        adot || true; docker rm adot; fi
+
+                        docker run --name adot --restart on-failure --detach -p
+                        4317:4317 -p 55680:55680 -p 8889:8888
+                        public.ecr.aws/aws-observability/aws-otel-collector:latest
+
+                        if [ "$(docker ps -qa -f name=restate)" ]; then docker
+                        stop restate || true; docker rm restate; fi
+
+                        docker run --name restate --restart on-failure --detach
+                        --volume /etc/restate:/etc/restate --volume
+                        /var/restate:/restate-data --network=host -e
+                        RESTATE_OBSERVABILITY__LOG__FORMAT=Json -e
+                        RUST_LOG=info,restate_worker::partition=warn -e
+                        RESTATE_OBSERVABILITY__TRACING__ENDPOINT=http://localhost:4317
+                        --log-driver=awslogs --log-opt awslogs-group=
+                      - Ref: RestateLogsFD86ECAE
+                      - ' docker.io/restatedev/restate:custom-version --config-file /etc/restate/config.toml'
+              - |
+
+                --+AWS+CDK+User+Data+Separator==--
+    DependsOn:
+      - RestateInstanceRoleDefaultPolicyD1D39538
+      - RestateInstanceRoleACC59A6F
+  RestateIngressSecurityGroupAF84F229:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: Restate Ingress ACLs
+      SecurityGroupEgress:
+        - CidrIp: 0.0.0.0/0
+          Description: Allow all outbound traffic by default
+          IpProtocol: '-1'
+      VpcId: vpc-12345
   RestateIngressSecurityGroupfromRestateSelfHostedServerEc2StackRestateIngressSecurityGroup2A345A7B8080B8082F1D:
     Type: 'AWS::EC2::SecurityGroupIngress'
     Properties:
-      Description: Allow traffic to Restate ingress port
+      Description: Restate ingress
       FromPort: 8080
       GroupId:
         'Fn::GetAtt':
@@ -818,7 +1164,7 @@ exports[`Restate constructs Create a self-hosted Restate environment deployed on
   RestateAdminSecurityGroupfromRestateSelfHostedServerEc2StackRestateAdminSecurityGroupFC96B1BB9070F9F6DD3D:
     Type: 'AWS::EC2::SecurityGroupIngress'
     Properties:
-      Description: Allow traffic to Restate admin port
+      Description: Restate admin
       FromPort: 9070
       GroupId:
         'Fn::GetAtt':
