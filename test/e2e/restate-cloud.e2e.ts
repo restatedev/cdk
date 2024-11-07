@@ -1,3 +1,14 @@
+/*
+ * Copyright (c) 2024 - Restate Software, Inc., Restate GmbH
+ *
+ * This file is part of the Restate SDK for Node.js/TypeScript,
+ * which is released under the MIT license.
+ *
+ * You can find a copy of the license in file LICENSE in the root
+ * directory of this repository or package, or at
+ * https://github.com/restatedev/sdk-typescript/blob/main/LICENSE
+ */
+
 import * as cdk from "aws-cdk-lib";
 import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as logs from "aws-cdk-lib/aws-logs";
@@ -29,7 +40,7 @@ const environment = new RestateCloudEnvironment(stack, "CloudEnv", {
 
 const deployer = new ServiceDeployer(stack, "ServiceDeployer", {
   removalPolicy: cdk.RemovalPolicy.DESTROY,
-  entry: "../../dist/register-service-handler/index.js", // only for tests
+  entry: "../../dist/register-service-handler/index.js", // only needed for in-tree tests
 });
 
 deployer.deployService("Greeter", handler.currentVersion, environment);

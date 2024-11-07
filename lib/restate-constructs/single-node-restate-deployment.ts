@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023 - Restate Software, Inc., Restate GmbH
+ * Copyright (c) 2023-2024 - Restate Software, Inc., Restate GmbH
  *
  * This file is part of the Restate SDK for Node.js/TypeScript,
  * which is released under the MIT license.
@@ -11,7 +11,6 @@
 
 import { Construct } from "constructs";
 import * as logs from "aws-cdk-lib/aws-logs";
-import { RetentionDays } from "aws-cdk-lib/aws-logs";
 import * as ec2 from "aws-cdk-lib/aws-ec2";
 import * as iam from "aws-cdk-lib/aws-iam";
 import { IRestateEnvironment } from "./restate-environment";
@@ -44,6 +43,12 @@ export interface SingleNodeRestateProps {
      */
     subnetType?: ec2.SubnetType.PRIVATE_WITH_EGRESS | ec2.SubnetType.PUBLIC;
   };
+
+  /**
+   * Allow incoming ingress traffic from anywhere. Default: `false`. Alternatively, add rules to the
+   * `ingressSecurityGroup` directly.
+   */
+  publicIngress?: boolean;
 
   /** Log group for Restate service logs. */
   logGroup?: logs.LogGroup;
@@ -94,21 +99,42 @@ export interface SingleNodeRestateProps {
   removalPolicy?: cdk.RemovalPolicy;
 
   /**
-   * The read timeout for proxyied ingress requests. Default: 3600 seconds.
+   * Control on-host TLS termination for ingress and admin ports. Defaults to `TlsTermination.NONE`. Currently, enabling
+   * TLS implicitly enables an `nginx` service to be configured on the host. Depending on the value of this option, the
+   * ingress security group will be configured to allow inbound traffic to the appropriate port - 8080 for no TLS, or
+   * 443 with TLS enabled.
+   */
+  tlsTermination?: TlsTermination;
+
+  /**
+   * The read timeout for proxied ingress requests. Default: 3600 seconds.
    */
   ingressProxyReadTimeout?: cdk.Duration;
 
   /**
-   * Completely override the default nginx configuration for the ingress proxy. Note that other
+   * Completely override the default `nginx` configuration for the ingress proxy. Note that other
    * ingress proxy configuration options will effectively be ignored if this is set.
    */
   ingressNginxConfigOverride?: string;
 }
 
-const PUBLIC_INGRESS_PORT = 443;
-const PUBLIC_ADMIN_PORT = 9070;
+export enum TlsTermination {
+  /**
+   * Disabled (default); expose the `restate-server` HTTP ports directly.
+   */
+  DISABLED,
+
+  /**
+   * Use self-signed certificates for TLS termination on the ingress and admin ports. Convenient for quick testing,
+   * make sure you set `insecure` = `true` when using `ServiceDeployer` to accept this certificate.
+   */
+  ON_HOST_SELF_SIGNED_CERTIFICATE,
+}
+
 const RESTATE_INGRESS_PORT = 8080;
+const RESTATE_TLS_INGRESS_PORT = 443;
 const RESTATE_ADMIN_PORT = 9070;
+const RESTATE_TLS_ADMIN_PORT = 9073;
 const RESTATE_IMAGE_DEFAULT = "docker.io/restatedev/restate";
 const RESTATE_DOCKER_DEFAULT_TAG = "latest";
 const ADOT_DOCKER_DEFAULT_TAG = "latest";
@@ -117,8 +143,20 @@ const DATA_DEVICE_NAME = "/dev/sdd";
 /**
  * Creates a Restate service deployment backed by a single EC2 instance, suitable for development and testing purposes.
  *
- * The EC2 instance will be created in the default VPC unless otherwise specified.
- * See {@link SingleNodeRestateProps} for available configuration options.
+ * **Durability**
+ *
+ * Restate data will be stored in a separate EBS volume which you can configure explicitly via the `dataVolumeOptions`
+ * property. Updating configuration settings may trigger instance reboot or replacement - consider snapshotting the data
+ * volume prior to deployments, and enabling instance termination protection.
+ *
+ * **Security**
+ *
+ * The EC2 instance will be created in the default VPC unless otherwise specified. Two security groups are created,
+ * `ingressSecurityGroup` and `adminSecurityGroup`, which control access to the Restate service ingress and admin ports
+ * respectively. You must add appropriate rules or add other resources to these security groups to allow access.
+ *
+ * See {@link SingleNodeRestateProps} for available configuration options, and {@link ServiceDeployer} for deploying
+ * Lambda handlers to environments.
  */
 export class SingleNodeRestateDeployment extends Construct implements IRestateEnvironment {
   readonly instance: ec2.Instance;
@@ -126,10 +164,12 @@ export class SingleNodeRestateDeployment extends Construct implements IRestateEn
   readonly invokerRole: iam.IRole;
   readonly vpc: ec2.IVpc;
   readonly ingressSecurityGroup: ec2.ISecurityGroup;
-  readonly adminSecurityGroup: ec2.ISecurityGroup;
-
+  readonly ingressPort: number;
   readonly ingressUrl: string;
+  readonly adminSecurityGroup: ec2.ISecurityGroup;
+  readonly adminPort: number;
   readonly adminUrl: string;
+  readonly tlsEnabled: boolean;
 
   constructor(scope: Construct, id: string, props: SingleNodeRestateProps) {
     super(scope, id);
@@ -161,7 +201,7 @@ export class SingleNodeRestateDeployment extends Construct implements IRestateEn
       props.logGroup ??
       new logs.LogGroup(this, "Logs", {
         logGroupName: `/restate/${id}`,
-        retention: RetentionDays.ONE_MONTH,
+        retention: logs.RetentionDays.ONE_MONTH,
         removalPolicy: props.removalPolicy ?? RemovalPolicy.DESTROY,
       });
     logGroup.grantWrite(this.instanceRole);
@@ -170,7 +210,7 @@ export class SingleNodeRestateDeployment extends Construct implements IRestateEn
     const restateTag = props.restateTag ?? RESTATE_DOCKER_DEFAULT_TAG;
     const adotTag = props.adotTag ?? ADOT_DOCKER_DEFAULT_TAG;
 
-    const ingressNginxConfig = this.ingressNginxConfig(props);
+    this.tlsEnabled = props.tlsTermination === TlsTermination.ON_HOST_SELF_SIGNED_CERTIFICATE;
 
     const initScript = ec2.UserData.forLinux();
     initScript.addCommands(
@@ -203,19 +243,22 @@ export class SingleNodeRestateDeployment extends Construct implements IRestateEn
         " --config-file /etc/restate/config.toml",
     );
 
-    if (subnetType == ec2.SubnetType.PUBLIC) {
-      initScript.addCommands(
-        "yum install -y nginx",
-        "mkdir -p /etc/pki/private",
-        [
-          "openssl req -new -x509 -nodes -sha256 -days 365 -extensions v3_ca",
-          " -subj '/C=DE/ST=Berlin/L=Berlin/O=restate.dev/OU=demo/CN=restate.example.com'",
-          " -newkey rsa:2048 -keyout /etc/pki/private/restate-selfsigned.key -out /etc/pki/private/restate-selfsigned.crt",
-        ].join(""),
+    // Optionally, configure and start the nginx service
+    if (this.tlsEnabled) {
+      if (subnetType == ec2.SubnetType.PUBLIC) {
+        initScript.addCommands(
+          "yum install -y nginx",
+          "mkdir -p /etc/pki/private",
+          [
+            "openssl req -new -x509 -nodes -sha256 -days 365 -extensions v3_ca",
+            " -subj '/C=DE/ST=Berlin/L=Berlin/O=restate.dev/OU=demo/CN=restate.example.com'",
+            " -newkey rsa:2048 -keyout /etc/pki/private/restate-selfsigned.key -out /etc/pki/private/restate-selfsigned.crt",
+          ].join(""),
 
-        ["cat << EOF > /etc/nginx/conf.d/restate-ingress.conf", ingressNginxConfig, "EOF"].join("\n"),
-        "systemctl start nginx",
-      );
+          ["cat << EOF > /etc/nginx/conf.d/restate-ingress.conf", this.ingressNginxConfig(props), "EOF"].join("\n"),
+          "systemctl start nginx",
+        );
+      }
     }
 
     const cloudConfig = ec2.UserData.custom([`cloud_final_modules:`, `- [scripts-user, always]`].join("\n"));
@@ -252,8 +295,8 @@ export class SingleNodeRestateDeployment extends Construct implements IRestateEn
 
     this.instance = restateInstance;
 
-    // We start the ADOT collector regardless, and only control whether they will be published to X-Ray via instance
-    // role permissions. This way historic traces will be buffered on the host, even if tracing is disabled initially.
+    // We start the ADOT collector regardless, and control whether traces will be exported to X-Ray using instance role
+    // permissions. This way historic traces will be buffered on the host, even if tracing is disabled initially.
     if (props.tracing === TracingMode.AWS_XRAY) {
       restateInstance.role.addManagedPolicy(iam.ManagedPolicy.fromAwsManagedPolicyName("AWSXrayWriteOnlyAccess"));
     }
@@ -269,38 +312,23 @@ export class SingleNodeRestateDeployment extends Construct implements IRestateEn
     });
     restateInstance.addSecurityGroup(adminSecurityGroup);
 
-    if (subnetType == ec2.SubnetType.PUBLIC) {
-      // Insecure, public-facing deployment
-      ingressSecurityGroup.addIngressRule(
-        ec2.Peer.anyIpv4(),
-        ec2.Port.tcp(PUBLIC_INGRESS_PORT),
-        "Allow traffic from anywhere to Restate ingress port",
-      );
-      adminSecurityGroup.addIngressRule(
-        ec2.Peer.anyIpv4(),
-        ec2.Port.tcp(PUBLIC_ADMIN_PORT),
-        "Allow traffic from anywhere to Restate admin port",
-      );
+    this.ingressPort = this.tlsEnabled ? RESTATE_TLS_INGRESS_PORT : RESTATE_INGRESS_PORT;
+    this.adminPort = this.tlsEnabled ? RESTATE_TLS_ADMIN_PORT : RESTATE_ADMIN_PORT;
 
-      this.ingressUrl =
-        `https://${restateInstance.instancePublicDnsName}` +
-        (PUBLIC_INGRESS_PORT == 443 ? "" : `:${PUBLIC_INGRESS_PORT}`);
-      this.adminUrl = `https://${restateInstance.instancePublicDnsName}:${PUBLIC_ADMIN_PORT}`;
-    } else {
-      ingressSecurityGroup.addIngressRule(
-        ingressSecurityGroup,
-        ec2.Port.tcp(RESTATE_INGRESS_PORT),
-        "Allow traffic to Restate ingress port",
-      );
-      adminSecurityGroup.addIngressRule(
-        adminSecurityGroup,
-        ec2.Port.tcp(RESTATE_ADMIN_PORT),
-        "Allow traffic to Restate admin port",
-      );
+    ingressSecurityGroup.addIngressRule(
+      (props.publicIngress ?? false) ? ec2.Peer.anyIpv4() : ingressSecurityGroup,
+      ec2.Port.tcp(this.ingressPort),
+      "Restate ingress",
+    );
+    adminSecurityGroup.addIngressRule(adminSecurityGroup, ec2.Port.tcp(this.adminPort), "Restate admin");
 
-      this.ingressUrl = `http://${restateInstance.instancePrivateDnsName}:${RESTATE_INGRESS_PORT}`;
-      this.adminUrl = `http://${restateInstance.instancePrivateDnsName}:${RESTATE_ADMIN_PORT}`;
-    }
+    const protocol = this.tlsEnabled ? "https" : "http";
+    const hostname =
+      props.networkConfiguration?.subnetType !== ec2.SubnetType.PUBLIC
+        ? `${restateInstance.instancePrivateDnsName}`
+        : `${restateInstance.instancePublicDnsName}`;
+    this.ingressUrl = `${protocol}://${hostname}` + (this.ingressPort === 443 ? "" : `:${this.ingressPort}`);
+    this.adminUrl = `${protocol}://${hostname}:${this.adminPort}`;
 
     this.ingressSecurityGroup = ingressSecurityGroup;
     this.adminSecurityGroup = adminSecurityGroup;
@@ -335,11 +363,15 @@ export class SingleNodeRestateDeployment extends Construct implements IRestateEn
         `rocksdb-statistics-level = "except-detailed-timers"`,
         `num-partitions-to-share-memory-budget = 4`,
         ``,
+        `[admin]`,
+        `bind-address = "${this.tlsEnabled ? "127.0.0.1" : "0.0.0.0"}:${RESTATE_ADMIN_PORT}"`,
+        ``,
         `[admin.query-engine]`,
         `memory-size = "50.0 MB"`,
         `query-parallelism = 4`,
         ``,
         `[ingress]`,
+        `bind-address = "${this.tlsEnabled ? "127.0.0.1" : "0.0.0.0"}:${RESTATE_INGRESS_PORT}"`,
         `rocksdb-max-background-jobs = 3`,
         `rocksdb-statistics-level = "except-detailed-timers"`,
         `writer-batch-commit-count = 1000`,
@@ -387,8 +419,8 @@ fi
       props.ingressNginxConfigOverride ??
       [
         "server {",
-        `  listen ${PUBLIC_INGRESS_PORT} ssl http2;`,
-        `  listen [::]:${PUBLIC_INGRESS_PORT} ssl http2;`,
+        `  listen ${RESTATE_TLS_INGRESS_PORT} ssl http2;`,
+        `  listen [::]:${RESTATE_TLS_INGRESS_PORT} ssl http2;`,
         "  server_name _;",
         "  root /usr/share/nginx/html;",
         "",
@@ -406,8 +438,8 @@ fi
         "}",
         "",
         "server {",
-        `  listen ${PUBLIC_ADMIN_PORT} ssl http2;`,
-        `  listen [::]:${PUBLIC_ADMIN_PORT} ssl http2;`,
+        `  listen ${RESTATE_TLS_ADMIN_PORT} ssl http2;`,
+        `  listen [::]:${RESTATE_TLS_ADMIN_PORT} ssl http2;`,
         "  server_name _;",
         "  root /usr/share/nginx/html;",
         "",

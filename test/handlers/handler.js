@@ -14,7 +14,7 @@
 import * as restate from "@restatedev/restate-sdk/lambda";
 
 const greet = async (ctx, name) => {
-  return `Hello, ${name ?? "Restate user"}!`;
+  return `Hello ${name ?? "from Restate"}!`;
 };
 
 export const handler = restate

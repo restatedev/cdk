@@ -1,4 +1,5 @@
 import * as cdk from "aws-cdk-lib";
+import * as ec2 from "aws-cdk-lib/aws-ec2";
 import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as secrets from "aws-cdk-lib/aws-secretsmanager";
 import * as iam from "aws-cdk-lib/aws-iam";
@@ -9,6 +10,7 @@ import {
   RestateEnvironment,
   ServiceDeployer,
   SingleNodeRestateDeployment,
+  TlsTermination,
 } from "../lib/restate-constructs";
 import { FargateRestateDeployment } from "../lib/restate-constructs/fargate-restate-deployment";
 
@@ -83,7 +85,26 @@ describe("Restate constructs", () => {
       env: { account: "account-id", region: "region" },
     });
 
-    new SingleNodeRestateDeployment(stack, "Restate", {});
+    new SingleNodeRestateDeployment(stack, "Restate", {
+      vpc: ec2.Vpc.fromLookup(stack, "Vpc", { isDefault: true }),
+      restateTag: "custom-version",
+    });
+
+    expect(stack).toMatchCdkSnapshot({
+      ignoreAssets: true,
+      yaml: true,
+    });
+  });
+
+  test("Create a self-hosted Restate environment deployed on EC2 (TLS termination)", () => {
+    const app = new cdk.App();
+    const stack = new cdk.Stack(app, "RestateSelfHostedServerEc2Stack", {
+      env: { account: "account-id", region: "region" },
+    });
+
+    new SingleNodeRestateDeployment(stack, "Restate", {
+      tlsTermination: TlsTermination.ON_HOST_SELF_SIGNED_CERTIFICATE,
+    });
 
     expect(stack).toMatchCdkSnapshot({
       ignoreAssets: true,

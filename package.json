@@ -41,8 +41,8 @@
   },
   "peerDependencies": {
     "@aws-sdk/client-secrets-manager": "^3.637.0",
-    "aws-cdk": "^2.155.0",
-    "aws-cdk-lib": "^2.155.0",
+    "aws-cdk": "^2.162.1",
+    "aws-cdk-lib": "^2.162.1",
     "constructs": "^10.3.0",
     "node-fetch": "^3.3.2"
   },
