@@ -1250,7 +1250,6 @@ exports[`Restate constructs Deploy a Lambda service handler to Restate Cloud env
         'Fn::GetAtt':
           - ServiceDeployerCustomResourceProviderframeworkonEvent528FE6C2
           - Arn
-      servicePath: Service
       adminUrl: 'https://test.env.us.restate.cloud:9070'
       authTokenSecretArn:
         'Fn::Join':
@@ -1513,7 +1512,6 @@ exports[`Restate constructs Deploy a Lambda service handler to existing Restate 
         'Fn::GetAtt':
           - ServiceDeployerCustomResourceProviderframeworkonEvent528FE6C2
           - Arn
-      servicePath: Service
       adminUrl: 'https://restate.example.com:9070'
       authTokenSecretArn:
         Ref: RestateApiKey6463672F

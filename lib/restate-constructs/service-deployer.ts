@@ -23,21 +23,61 @@ import { RegistrationProperties } from "./register-service-handler";
 
 const DEFAULT_TIMEOUT = cdk.Duration.seconds(180);
 
+export interface ServiceRegistrationProps {
+  /**
+   * Secrets Manager secret ARN for the authentication token to use when calling the admin API. Takes precedence
+   * over the environment's token.
+   */
+  authToken?: secrets.ISecret;
+
+  /**
+   * Whether to skip granting the invoker role permission to invoke the service handler. The deployer by default
+   * will grant the invoker role permission to invoke the handler, but you can set this to `true` to handle this
+   * manually.
+   */
+  skipInvokeFunctionGrant?: boolean;
+
+  /**
+   * Private services are only available to other Restate services in the same environment, and are not accessible for
+   * ingress-based invocation. If multiple services are exposed by the same handler, all of them will be updated.
+   * Default: `false`, i.e. services will be made public and reachable via ingress by default.
+   *
+   * @see https://docs.restate.dev/operate/registration#private-services
+   */
+  private?: boolean;
+
+  /**
+   * A dummy parameter to force CloudFormation to update the deployment when the configuration changes. Useful if
+   * you want to target the "latest version" of a service handler and need to force a deployment in order to trigger
+   * discovery. Set this to a new value every time you want to force a service registration to happen, e.g. a timestamp.
+   */
+  configurationVersion?: string;
+
+  /**
+   * Accept self-signed certificates.
+   */
+  insecure?: boolean;
+
+  /**
+   * Specify a custom admin endpoint URL, overriding the one exposed by the target environment. You may need this if
+   * the `Environment` construct is reporting a different URL from the one that the deployer can reach, e.g. if your
+   * Restate service is behind a load balancer.
+   */
+  adminUrl?: string;
+}
+
 /**
- * This construct implements a custom CloudFormation resource provider that handles deploying Lambda-based service
- * handlers with a Restate environment. It is used internally by the Cloud and self-hosted Restate environment
- * constructs and not intended for direct use by end users of Restate.
+ * Register Lambda-backed restate services with Restate environments.
  *
- * This functionality is implemented as a custom resource so that we are notified of any updates to service handler
- * functions: by creating a CloudFormation component, we can model the dependency that any changes to the handlers need
- * to be communicated to the registrar. Without this dependency, CloudFormation might perform an update deployment that
- * triggered by a Lambda handler code or configuration change, and the Restate environment would be unaware of it.
- *
- * You can share the same deployer across multiple service registries provided the configuration options are compatible
- * (e.g. the Restate environments it needs to communicate with for deployment are all accessible via the same VPC and
- * Security Groups, accept the same authentication token, and so on).
+ * You can reuse the same deployer to register the services exposed by multiple handlers. You can also reuse the
+ * deployer to target multiple Restate environments, provided the configuration options are compatible (e.g. the Restate
+ * environments it needs to communicate with are all accessible from the same VPC and Security Groups, accept the same
+ * authentication token, and so on). Conversely, you can create multiple deployers in cases when you need to deploy to
+ * multiple environments that require distinct configuration.
  *
  * Deployment logs are retained for 30 days by default.
+ *
+ * @see {register}
  */
 export class ServiceDeployer extends Construct {
   /** The custom resource provider for handling "deployment" resources. */
@@ -100,10 +140,33 @@ export class ServiceDeployer extends Construct {
   }
 
   /**
-   * Deploy a Lambda-backed Restate service to a given environment. This will register a deployment that will trigger
-   * a Restate registration whenever the handler resource changes.
+   * Deploy a Lambda-backed Restate handler to a given environment.
    *
-   * @param serviceName the service name within Restate - this must match the service's self-reported name during discovery
+   * Note that a change in the handler properties is necessary to trigger re-discovery due to how CloudFormation updates
+   * work. If you deploy a fixed Lambda alias such as `$LATEST` which isn't changing on every handler code or
+   * configuration update, you will want to set the `configurationVersion` property in `options` to a new value (e.g. a
+   * timestamp) to ensure an update to the Restate environment is triggered on stack deployment.
+   *
+   * @param handler service handler - must be a specific function version, use "latest" if you don't care about explicit versioning
+   * @param environment target Restate environment
+   * @param options additional options; see field documentation for details
+   * @see {ServiceRegistrationProps}
+   */
+  register(handler: lambda.IVersion, environment: IRestateEnvironment, options?: ServiceRegistrationProps) {
+    this.registerServiceInternal(undefined, handler, environment, options);
+  }
+
+  /**
+   * Deploy a Lambda-backed Restate handler to a given environment, ensuring that a particular service name exists.
+   *
+   * Note that a change in the handler properties is necessary to trigger re-discovery due to how CloudFormation updates
+   * work. If you deploy a fixed Lambda alias such as `$LATEST` which isn't changing on every handler code or
+   * configuration update, you will want to set the `configurationVersion` property in `options` to a new value (e.g. a
+   * timestamp) to ensure an update to the Restate environment is triggered on stack deployment.
+   *
+   * @param serviceName the service name within Restate - as a safety mechanism, this must match the service's
+   *        self-reported name during discovery; if there are multiple services, one of them must match or the
+   *        deployment fails
    * @param handler service handler - must be a specific function version, use "latest" if you don't care about explicit versioning
    * @param environment target Restate environment
    * @param options additional options; see field documentation for details
@@ -112,36 +175,16 @@ export class ServiceDeployer extends Construct {
     serviceName: string,
     handler: lambda.IVersion,
     environment: IRestateEnvironment,
-    options?: {
-      /**
-       * Secrets Manager secret ARN for the authentication token to use when calling the admin API. Takes precedence
-       * over the environment's token.
-       */
-      authToken?: secrets.ISecret;
-      /**
-       * Whether to skip granting the invoker role permission to invoke the service handler.
-       */
-      skipInvokeFunctionGrant?: boolean;
-      /**
-       * Whether to mark the service as private, and make it unavailable to be called via Restate ingress.
-       * @see https://docs.restate.dev/operate/registration#private-services
-       */
-      private?: boolean;
-      /**
-       * A dummy parameter to force CloudFormation to update the deployment when the configuration changes. Useful if
-       * you want to target the "latest version" of a service handler and need to force a deployment in order to trigger
-       * discovery.
-       */
-      configurationVersion?: string;
-      /**
-       * Whether to accept self-signed certificates.
-       */
-      insecure?: boolean;
-      /**
-       * Specify a custom admin endpoint URL, overriding the one exposed by the target environment.
-       */
-      adminUrl?: string;
-    },
+    options?: ServiceRegistrationProps,
+  ) {
+    this.registerServiceInternal(serviceName, handler, environment, options);
+  }
+
+  private registerServiceInternal(
+    serviceName: string | undefined,
+    handler: lambda.IVersion,
+    environment: IRestateEnvironment,
+    options?: ServiceRegistrationProps,
   ) {
     const authToken = options?.authToken ?? environment.authToken;
     authToken?.grantRead(this.deploymentResourceProvider.onEventHandler);
@@ -157,7 +200,10 @@ export class ServiceDeployer extends Construct {
         invokeRoleArn: environment.invokerRole?.roleArn,
         removalPolicy: cdk.RemovalPolicy.RETAIN,
         private: (options?.private ?? false).toString() as "true" | "false",
-        configurationVersion: options?.configurationVersion,
+        configurationVersion:
+          options?.configurationVersion || handler.functionArn.endsWith(":$LATEST")
+            ? new Date().toISOString()
+            : undefined,
         insecure: (options?.insecure ?? false).toString() as "true" | "false",
       } satisfies RegistrationProperties,
     });
