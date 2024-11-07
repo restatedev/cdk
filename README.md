@@ -34,5 +34,6 @@ the [Restate CDK documentation](https://docs.restate.dev/deploy/lambda/cdk).
 
 You can use the following templates to bootstrap your own CDK projects:
 
+- [e2e tests in this repository](test/e2e)
 - [typescript-lambda-cdk](https://github.com/restatedev/examples/tree/main/templates/typescript-lambda-cdk)
 - [kotlin-gradle-lambda-cdk](https://github.com/restatedev/examples/tree/main/templates/kotlin-gradle-lambda-cdk)

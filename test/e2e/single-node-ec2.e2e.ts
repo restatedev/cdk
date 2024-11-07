@@ -19,7 +19,7 @@ import * as ec2 from "aws-cdk-lib/aws-ec2";
 
 // Deploy with: npx cdk --app 'npx tsx single-node-ec2.e2e.ts' deploy --context vpc_id=...
 const app = new cdk.App();
-const stack = new cdk.Stack(app, "e2e-RestateSingleNodeEc2Lite", {
+const stack = new cdk.Stack(app, "e2e-RestateSingleNode", {
   env: {
     account: process.env.CDK_DEFAULT_ACCOUNT,
     region: process.env.CDK_DEFAULT_REGION,

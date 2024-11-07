@@ -24,7 +24,7 @@ import { ServiceDeployer, SingleNodeRestateDeployment } from "../../lib/restate-
 
 // Deploy with: npx cdk --app 'npx tsx single-node-ec2-alb.e2e.ts' deploy --context vpc_id=... --context domainName=... --context hostname=...
 const app = new cdk.App();
-const stack = new cdk.Stack(app, "e2e-restate-ec2-alb", {
+const stack = new cdk.Stack(app, "e2e-RestateSingleNodeAlb", {
   env: {
     account: process.env.CDK_DEFAULT_ACCOUNT,
     region: process.env.CDK_DEFAULT_REGION,
