@@ -36,7 +36,7 @@ describe("Restate constructs", () => {
       // only needed in testing, where the relative path of the registration function is different from how customers would use it
       entry: "dist/register-service-handler/index.js",
     });
-    serviceDeployer.deployService("Service", handler.currentVersion, cloudEnvironment);
+    serviceDeployer.register(handler.currentVersion, cloudEnvironment);
 
     expect(stack).toMatchCdkSnapshot({
       ignoreAssets: true,
@@ -71,7 +71,7 @@ describe("Restate constructs", () => {
       // only needed in testing, where the relative path of the registration function is different from how customers would use it
       entry: "dist/register-service-handler/index.js",
     });
-    serviceDeployer.deployService("Service", handler.currentVersion, restateEnvironment);
+    serviceDeployer.register(handler.currentVersion, restateEnvironment);
 
     expect(stack).toMatchCdkSnapshot({
       ignoreAssets: true,

@@ -18,34 +18,53 @@ import { randomInt } from "crypto";
 import * as https from "node:https";
 import * as http from "node:http";
 
+/**
+ * Custom Resource event shape for registering Restate Lambda service handlers with a Restate environment.
+ */
 export interface RegistrationProperties {
-  servicePath?: string;
+  /** Where to find the Restate admin endpoint. */
   adminUrl?: string;
+
+  /**
+   * Optional service name to look for in the deployment. If more than one service is behind the same endpoint, any one
+   * should match. Leave unset to skip the check.
+   */
+  servicePath?: string;
+
   serviceLambdaArn?: string;
+
   invokeRoleArn?: string;
-  removalPolicy?: cdk.RemovalPolicy;
+
+  /**
+   * Authentication token ARN to use with the admin endpoint. The secret value will be used as a bearer token, if set.
+   */
   authTokenSecretArn?: string;
-  /* Not used by the handler, purely used to trick CloudFormation to perform an update when it otherwise would not. */
+
+  /** Not used by the handler, purely used to trick CloudFormation to perform an update when it otherwise would not. */
   configurationVersion?: string;
-  /* Whether to mark the service as private, and make it unavailable to be called via Restate ingress. */
+
+  /**
+   * Whether to mark the service as private, and make it unavailable to be called via Restate ingress. If there are
+   * multiple services provided by the endpoint, they will all be marked as specified.
+   */
   private?: "true" | "false";
-  /* Whether to trust any certificate from the admin endpoint. */
+
+  /** Whether to trust any certificate when connecting to the admin endpoint. */
   insecure?: "true" | "false";
+
+  removalPolicy?: cdk.RemovalPolicy;
 }
 
 type RegisterDeploymentResponse = {
-  id?: string;
-  services?: { name?: string; revision?: number }[];
+  id: string;
+  services: { name: string; revision: number; public: boolean }[];
 };
 
 const MAX_HEALTH_CHECK_ATTEMPTS = 5; // This is intentionally quite long to allow some time for first-run EC2 and Docker boot up
 const MAX_REGISTRATION_ATTEMPTS = 3;
 
-// const INSECURE = true;
-
 const DEPLOYMENTS_PATH = "deployments";
 const SERVICES_PATH = "services";
-const DEPLOYMENTS_PATH_LEGACY = "endpoints"; // temporarily fall back for legacy clusters
 
 /**
  * Custom Resource event handler for Restate service registration. This handler backs the custom resources created by
@@ -143,7 +162,7 @@ export const handler: Handler<CloudFormationCustomResourceEvent, void> = async f
     await sleep(waitTimeMillis);
   }
 
-  let deploymentsUrl = `${props.adminUrl}/${DEPLOYMENTS_PATH}`;
+  const deploymentsUrl = `${props.adminUrl}/${DEPLOYMENTS_PATH}`;
   const registrationRequest = JSON.stringify({
     arn: props.serviceLambdaArn,
     assume_role_arn: props.invokeRoleArn,
@@ -151,8 +170,9 @@ export const handler: Handler<CloudFormationCustomResourceEvent, void> = async f
 
   let failureReason;
   attempt = 1;
-  console.log(`Triggering registration at ${deploymentsUrl}: ${registrationRequest}`);
-  while (true) {
+  console.log(`Registering services at ${deploymentsUrl}: ${registrationRequest}`);
+
+  registration_retry_loop: while (true) {
     try {
       console.log(`Making registration request #${attempt}...`);
       const controller = new AbortController();
@@ -168,48 +188,51 @@ export const handler: Handler<CloudFormationCustomResourceEvent, void> = async f
         agent: agentSelector,
       }).finally(() => clearTimeout(registerCallTimeout));
 
-      if (registerDeploymentResponse.status == 404 && attempt == 1) {
-        deploymentsUrl = `${props.adminUrl}/${DEPLOYMENTS_PATH_LEGACY}`;
-        console.log(`Got 404, falling back to <0.7.0 legacy endpoint registration at: ${deploymentsUrl}`);
-      }
-
       if (registerDeploymentResponse.status >= 200 && registerDeploymentResponse.status < 300) {
         const response = (await registerDeploymentResponse.json()) as RegisterDeploymentResponse;
 
-        // TODO: there may be more than one! support optional exact/partial matching
-        if (!response?.services?.find((s) => s.name === props.servicePath)) {
+        if (props.servicePath && !response.services.find((s) => s.name === props.servicePath)) {
           failureReason =
-            "Restate service registration failed: service name indicated by service response" +
-            ` ("${response?.services?.[0]?.name})) does not match the expected value ("${props.servicePath}")!`;
+            `"Registration succeeded, but none the services names in the deployment matched the specified name. " + 
+            "Expected \"${props.servicePath}\"", got back: [` + response.services.map((svc) => svc?.name).join(", ");
+          `]`;
 
           attempt = MAX_REGISTRATION_ATTEMPTS; // don't retry this
           break;
         }
 
-        console.log("Successful registration!");
+        console.log("Successful registration! Services: ", JSON.stringify(response.services));
 
         const isPublic = (props.private ?? "false") === "false";
-        console.log(`Marking service ${props.servicePath} as ${isPublic ? "public" : "private"}...`);
-        const controller = new AbortController();
-        const privateCallTimeout = setTimeout(() => controller.abort("timeout"), 10_000);
-        const patchResponse = await fetch(`${props.adminUrl}/${SERVICES_PATH}/${props.servicePath}`, {
-          signal: controller.signal,
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-            ...authHeader,
-          },
-          body: JSON.stringify({ public: isPublic }),
-          agent: agentSelector,
-        }).finally(() => clearTimeout(privateCallTimeout));
 
-        console.log(`Got patch response back: ${patchResponse.status}`);
-        if (patchResponse.status != 200) {
-          failureReason = `Marking service as ${props.private ? "private" : "public"} failed: ${patchResponse.statusText} (${patchResponse.status})`;
-          break; // don't throw immediately - let retry loop decide whether to abort s
+        for (const service of response.services ?? []) {
+          if (service.public === isPublic) {
+            console.log(`Service ${service.name} is ${isPublic ? "public" : "private"}.`);
+            continue;
+          }
+
+          console.log(`Marking service ${service.name} as ${isPublic ? "public" : "private"}...`);
+          const controller = new AbortController();
+          const privateCallTimeout = setTimeout(() => controller.abort("timeout"), 10_000);
+          const patchResponse = await fetch(`${props.adminUrl}/${SERVICES_PATH}/${service.name}`, {
+            signal: controller.signal,
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+              ...authHeader,
+            },
+            body: JSON.stringify({ public: isPublic }),
+            agent: agentSelector,
+          }).finally(() => clearTimeout(privateCallTimeout));
+
+          console.log(`Got patch response back: ${patchResponse.status}`);
+          if (patchResponse.status != 200) {
+            failureReason = `Marking service as ${props.private ? "private" : "public"} failed: ${patchResponse.statusText} (${patchResponse.status})`;
+            break registration_retry_loop; // don't throw immediately - let retry loop decide whether to abort s
+          }
+
+          console.log(`Successfully marked service as ${isPublic ? "public" : "private"}.`);
         }
-
-        console.log(`Successfully marked service as ${isPublic ? "public" : "private"}.`);
 
         return; // Overall success!
       } else {
