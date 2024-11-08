@@ -82,6 +82,7 @@ export interface ServiceRegistrationProps {
 export class ServiceDeployer extends Construct {
   /** The custom resource provider for handling "deployment" resources. */
   readonly deploymentResourceProvider: cr.Provider;
+  readonly eventHandler: lambda_node.NodejsFunction;
 
   private invocationPolicy?: iam.Policy;
 
@@ -93,15 +94,23 @@ export class ServiceDeployer extends Construct {
      * VPC and security group settings for Restate environments that require it.
      */
     props?: Pick<
-      lambda.FunctionOptions,
-      "functionName" | "logGroup" | "timeout" | "vpc" | "vpcSubnets" | "securityGroups" | "allowPublicSubnet"
+      lambda_node.NodejsFunctionProps,
+      | "allowPublicSubnet"
+      | "bundling"
+      | "code"
+      | "entry"
+      | "functionName"
+      | "logGroup"
+      | "securityGroups"
+      | "timeout"
+      | "vpc"
+      | "vpcSubnets"
     > &
-      Pick<lambda_node.NodejsFunctionProps, "entry"> &
       Pick<logs.LogGroupProps, "removalPolicy">,
   ) {
     super(scope, id);
 
-    const eventHandler = new lambda_node.NodejsFunction(this, "EventHandler", {
+    this.eventHandler = new lambda_node.NodejsFunction(this, "EventHandler", {
       functionName: props?.functionName,
       logGroup: props?.logGroup,
       description: "Restate custom registration handler",
@@ -130,13 +139,15 @@ export class ServiceDeployer extends Construct {
     if (!props?.logGroup) {
       // By default, Lambda Functions have a log group with never-expiring retention policy.
       new logs.LogGroup(this, "DeploymentLogs", {
-        logGroupName: `/aws/lambda/${eventHandler.functionName}`,
+        logGroupName: `/aws/lambda/${this.eventHandler.functionName}`,
         retention: logs.RetentionDays.ONE_MONTH,
-        removalPolicy: cdk.RemovalPolicy.RETAIN_ON_UPDATE_OR_DELETE,
+        removalPolicy: props?.removalPolicy ?? cdk.RemovalPolicy.RETAIN_ON_UPDATE_OR_DELETE,
       });
     }
 
-    this.deploymentResourceProvider = new cr.Provider(this, "CustomResourceProvider", { onEventHandler: eventHandler });
+    this.deploymentResourceProvider = new cr.Provider(this, "CustomResourceProvider", {
+      onEventHandler: this.eventHandler,
+    });
   }
 
   /**
