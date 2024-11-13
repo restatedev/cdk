@@ -56,7 +56,7 @@ describe("Restate constructs", () => {
         minify: true,
         sourceMap: false,
         target: "node20",
-      }
+      },
     });
 
     expect(stack).toMatchCdkSnapshot({
