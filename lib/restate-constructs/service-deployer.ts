@@ -122,7 +122,7 @@ export class ServiceDeployer extends Construct {
       environment: {
         NODE_OPTIONS: "--enable-source-maps",
       },
-      bundling: {
+      bundling: props?.bundling ?? {
         minify: false,
         sourceMap: true,
       },

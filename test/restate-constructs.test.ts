@@ -44,6 +44,27 @@ describe("Restate constructs", () => {
     });
   });
 
+  test("Service Deployer overrides", () => {
+    const app = new cdk.App();
+    const stack = new cdk.Stack(app, "RestateCloudStack", {
+      env: { account: "account-id", region: "region" },
+    });
+    const serviceDeployer = new ServiceDeployer(stack, "ServiceDeployer", {
+      // only needed in testing, where the relative path of the registration function is different from how customers would use it
+      entry: "dist/register-service-handler/index.js",
+      bundling: {
+        minify: true,
+        sourceMap: false,
+        target: "node20",
+      }
+    });
+
+    expect(stack).toMatchCdkSnapshot({
+      ignoreAssets: false,
+      yaml: true,
+    });
+  });
+
   test("Deploy a Lambda service handler to existing Restate environment", () => {
     const app = new cdk.App();
     const stack = new cdk.Stack(app, "LambdaServiceDeployment", {});
