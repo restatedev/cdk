@@ -214,7 +214,7 @@ export class FargateRestateDeployment extends Construct implements IRestateEnvir
       stopTimeout: cdk.Duration.seconds(20),
     });
     restate.addMountPoints({
-      containerPath: "/target",
+      containerPath: "/restate-data",
       readOnly: false,
       sourceVolume: "restateStore",
     });

@@ -142,7 +142,7 @@ exports[`Restate constructs [Experimental] Create a self-hosted Restate environm
               awslogs-stream-prefix: restate
               awslogs-region: region
           MountPoints:
-            - ContainerPath: /target
+            - ContainerPath: /restate-data
               ReadOnly: false
               SourceVolume: restateStore
           Name: restate-runtime
