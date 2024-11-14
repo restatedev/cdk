@@ -130,8 +130,10 @@ exports[`Restate constructs [Experimental] Create a self-hosted Restate environm
     Properties:
       ContainerDefinitions:
         - Environment:
-            - Name: RESTATE_OBSERVABILITY__LOG__FORMAT
-              Value: Json
+            - Name: RESTATE_LOG_FORMAT
+              Value: json
+            - Name: RESTATE_NODE_NAME
+              Value: fargate
           Essential: true
           Image: Any<Object>
           LogConfiguration:
@@ -424,10 +426,10 @@ exports[`Restate constructs [Experimental] Create a self-hosted Restate environm
     Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
     Properties:
       HealthCheckIntervalSeconds: 5
-      HealthCheckPath: /grpc.health.v1.Health/Check
+      HealthCheckPath: /restate/health
       HealthCheckTimeoutSeconds: 2
       HealthyThresholdCount: 3
-      Port: 80
+      Port: 8080
       Protocol: HTTP
       TargetGroupAttributes:
         - Key: deregistration_delay.timeout_seconds
@@ -458,7 +460,7 @@ exports[`Restate constructs [Experimental] Create a self-hosted Restate environm
       HealthCheckPath: /health
       HealthCheckTimeoutSeconds: 2
       HealthyThresholdCount: 3
-      Port: 80
+      Port: 9070
       Protocol: HTTP
       TargetGroupAttributes:
         - Key: deregistration_delay.timeout_seconds
