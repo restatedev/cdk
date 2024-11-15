@@ -10,6 +10,7 @@
  */
 
 export * from "./service-deployer";
+export * from "./fargate-restate-deployment";
 export * from "./restate-environment";
 export * from "./restate-cloud-environment";
 export * from "./deployments-common";

@@ -206,15 +206,15 @@ export class FargateRestateDeployment extends Construct implements IRestateEnvir
         streamPrefix: "restate",
       }),
       environment: {
-        RESTATE_OBSERVABILITY__LOG__FORMAT: "Json",
-        // RUST_LOG: "warn,restate=info",
+        RESTATE_LOG_FORMAT: "json",
+        RESTATE_NODE_NAME: "fargate",
       },
       command: props.command,
       startTimeout: cdk.Duration.seconds(20),
       stopTimeout: cdk.Duration.seconds(20),
     });
     restate.addMountPoints({
-      containerPath: "/target",
+      containerPath: "/restate-data",
       readOnly: false,
       sourceVolume: "restateStore",
     });
@@ -265,9 +265,10 @@ export class FargateRestateDeployment extends Construct implements IRestateEnvir
           containerPort: RESTATE_INGRESS_PORT,
         }),
       ],
+      port: RESTATE_INGRESS_PORT,
       protocol: elb2.ApplicationProtocol.HTTP,
       healthCheck: {
-        path: "/grpc.health.v1.Health/Check",
+        path: "/restate/health",
         interval: cdk.Duration.seconds(5),
         healthyThresholdCount: 3,
         unhealthyThresholdCount: 3,
@@ -289,6 +290,7 @@ export class FargateRestateDeployment extends Construct implements IRestateEnvir
           containerPort: RESTATE_ADMIN_PORT,
         }),
       ],
+      port: RESTATE_ADMIN_PORT,
       protocol: elb2.ApplicationProtocol.HTTP,
       healthCheck: {
         path: "/health",
