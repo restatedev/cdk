@@ -96,6 +96,7 @@ export class ServiceDeployer extends Construct {
     props?: Pick<
       lambda_node.NodejsFunctionProps,
       | "allowPublicSubnet"
+      | "architecture"
       | "bundling"
       | "code"
       | "entry"
@@ -115,7 +116,7 @@ export class ServiceDeployer extends Construct {
       logGroup: props?.logGroup,
       description: "Restate custom registration handler",
       entry: props?.entry ?? path.join(__dirname, "register-service-handler/index.js"),
-      architecture: lambda.Architecture.ARM_64,
+      architecture: props?.architecture ?? lambda.Architecture.ARM_64,
       runtime: lambda.Runtime.NODEJS_LATEST,
       memorySize: 128,
       timeout: props?.timeout ?? DEFAULT_TIMEOUT,
