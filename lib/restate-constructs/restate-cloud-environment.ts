@@ -28,6 +28,11 @@ export interface RestateCloudEnvironmentProps {
    * API key with administrative permissions. Used to manage services to the environment, see {@link ServiceDeployer}.
    */
   readonly apiKey: secrets.ISecret;
+
+  /**
+   * Region of the environment. Defaults to "us".
+   */
+  readonly region?: RestateCloudRegion;
 }
 
 /**
@@ -39,6 +44,7 @@ export class RestateCloudEnvironment extends Construct implements IRestateEnviro
   readonly ingressUrl: string;
   readonly authToken: secrets.ISecret;
   readonly invokerRole: iam.IRole;
+  readonly region: RestateCloudRegion;
 
   /**
    * Constructs a Restate Cloud environment reference along with invoker. Note that this construct is only a pointer to
@@ -56,8 +62,9 @@ export class RestateCloudEnvironment extends Construct implements IRestateEnviro
     super(scope, id);
     this.invokerRole = this.createInvokerRole(this, props);
     this.authToken = props.apiKey;
-    this.adminUrl = adminEndpoint(RESTATE_CLOUD_REGION_US, props.environmentId);
-    this.ingressUrl = ingressEndpoint(RESTATE_CLOUD_REGION_US, props.environmentId);
+    this.region = props.region ?? RESTATE_CLOUD_REGION_US;
+    this.adminUrl = adminEndpoint(this.region, props.environmentId);
+    this.ingressUrl = ingressEndpoint(this.region, props.environmentId);
   }
 
   /**
@@ -67,10 +74,10 @@ export class RestateCloudEnvironment extends Construct implements IRestateEnviro
    */
   protected createInvokerRole(scope: Construct, props: RestateCloudEnvironmentProps): iam.IRole {
     const invokerRole = new iam.Role(scope, "InvokerRole", {
-      assumedBy: new iam.AccountPrincipal(CONFIG[RESTATE_CLOUD_REGION_US].accountId).withConditions({
+      assumedBy: new iam.AccountPrincipal(CONFIG[this.region].accountId).withConditions({
         StringEquals: {
           "sts:ExternalId": props.environmentId,
-          "aws:PrincipalArn": CONFIG[RESTATE_CLOUD_REGION_US].principalArn,
+          "aws:PrincipalArn": CONFIG[this.region].principalArn,
         },
       }),
     });
@@ -95,7 +102,7 @@ function ingressEndpoint(region: RestateCloudRegion, environmentId: EnvironmentI
 }
 
 export type EnvironmentId = `env_${string}`;
-type RestateCloudRegion = "us";
+type RestateCloudRegion = "us" | "eu";
 
 interface RegionConfig {
   accountId: string;
@@ -106,6 +113,10 @@ const RESTATE_CLOUD_REGION_US = "us";
 
 const CONFIG = {
   us: {
+    accountId: "654654156625",
+    principalArn: "arn:aws:iam::654654156625:role/RestateCloud",
+  },
+  eu: {
     accountId: "654654156625",
     principalArn: "arn:aws:iam::654654156625:role/RestateCloud",
   },
