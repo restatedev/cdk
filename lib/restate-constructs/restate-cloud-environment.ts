@@ -60,9 +60,9 @@ export class RestateCloudEnvironment extends Construct implements IRestateEnviro
    */
   constructor(scope: Construct, id: string, props: RestateCloudEnvironmentProps) {
     super(scope, id);
+    this.region = props.region ?? RESTATE_CLOUD_REGION_US;
     this.invokerRole = this.createInvokerRole(this, props);
     this.authToken = props.apiKey;
-    this.region = props.region ?? RESTATE_CLOUD_REGION_US;
     this.adminUrl = adminEndpoint(this.region, props.environmentId);
     this.ingressUrl = ingressEndpoint(this.region, props.environmentId);
   }
