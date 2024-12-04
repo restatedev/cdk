@@ -30,7 +30,7 @@ export interface RestateCloudEnvironmentProps {
   readonly apiKey: secrets.ISecret;
 
   /**
-   * Region of the environment. Defaults to "us".
+   * Region of the environment. Defaults to `us`. Valid values: [`us`, `eu`].
    */
   readonly region?: RestateCloudRegion;
 }
@@ -40,11 +40,12 @@ export interface RestateCloudEnvironmentProps {
  * [Restate Cloud](https://cloud.restate.dev/) hosted service.
  */
 export class RestateCloudEnvironment extends Construct implements IRestateEnvironment {
-  readonly adminUrl: string;
-  readonly ingressUrl: string;
-  readonly authToken: secrets.ISecret;
-  readonly invokerRole: iam.IRole;
-  readonly region: RestateCloudRegion;
+  public readonly environmentId: EnvironmentId;
+  public readonly adminUrl: string;
+  public readonly ingressUrl: string;
+  public readonly authToken: secrets.ISecret;
+  public readonly invokerRole: iam.IRole;
+  public readonly region: RestateCloudRegion;
 
   /**
    * Constructs a Restate Cloud environment reference along with invoker. Note that this construct is only a pointer to
@@ -60,6 +61,7 @@ export class RestateCloudEnvironment extends Construct implements IRestateEnviro
    */
   constructor(scope: Construct, id: string, props: RestateCloudEnvironmentProps) {
     super(scope, id);
+    this.environmentId = props.environmentId;
     this.region = props.region ?? RESTATE_CLOUD_REGION_US;
     this.invokerRole = this.createInvokerRole(this, props);
     this.authToken = props.apiKey;
@@ -102,7 +104,7 @@ function ingressEndpoint(region: RestateCloudRegion, environmentId: EnvironmentI
 }
 
 export type EnvironmentId = `env_${string}`;
-type RestateCloudRegion = "us" | "eu";
+export type RestateCloudRegion = "us" | "eu";
 
 interface RegionConfig {
   accountId: string;

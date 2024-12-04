@@ -48,7 +48,6 @@ export class RestateEnvironment implements IRestateEnvironment {
   readonly adminUrl: string;
   readonly authToken?: secrets.ISecret;
   readonly invokerRole?: iam.IRole;
-  readonly serviceDeployer: ServiceDeployer;
 
   private constructor(props: IRestateEnvironment) {
     this.adminUrl = props.adminUrl;
