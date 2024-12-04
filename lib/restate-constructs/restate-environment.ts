@@ -12,7 +12,6 @@
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as secrets from "aws-cdk-lib/aws-secretsmanager";
 import { FunctionOptions } from "aws-cdk-lib/aws-lambda";
-import { ServiceDeployer } from "./service-deployer";
 import { SingleNodeRestateDeployment } from "./single-node-restate-deployment";
 import { RestateCloudEnvironment } from "./restate-cloud-environment";
 
@@ -48,7 +47,6 @@ export class RestateEnvironment implements IRestateEnvironment {
   readonly adminUrl: string;
   readonly authToken?: secrets.ISecret;
   readonly invokerRole?: iam.IRole;
-  readonly serviceDeployer: ServiceDeployer;
 
   private constructor(props: IRestateEnvironment) {
     this.adminUrl = props.adminUrl;

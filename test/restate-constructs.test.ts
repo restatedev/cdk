@@ -12,9 +12,39 @@ import {
   SingleNodeRestateDeployment,
   TlsTermination,
 } from "../lib/restate-constructs";
-import { FargateRestateDeployment } from "../lib/restate-constructs/fargate-restate-deployment";
+import { FargateRestateDeployment } from "../lib/restate-constructs";
 
 describe("Restate constructs", () => {
+  test("Cloud Environment API", () => {
+    const app = new cdk.App();
+    const stack = new cdk.Stack(app, "RestateCloudStack", {
+      env: { account: "account-id", region: "region" },
+    });
+    const apiKey = secrets.Secret.fromSecretNameV2(stack, "CloudApiKey", "secret_name");
+
+    const e1 = new RestateCloudEnvironment(stack, "e1", {
+      environmentId: "env_e1",
+      apiKey,
+      // default "us" region
+    });
+    expect(e1.environmentId).toBe("env_e1");
+    expect(e1.region).toBe("us");
+    expect(e1.ingressUrl).toBe("https://e1.env.us.restate.cloud");
+    expect(e1.adminUrl).toBe("https://e1.env.us.restate.cloud:9070");
+    expect(e1.authToken).toBe(apiKey);
+
+    const e2 = new RestateCloudEnvironment(stack, "e2", {
+      environmentId: "env_e2",
+      apiKey,
+      region: "eu",
+    });
+    expect(e2.environmentId).toBe("env_e2");
+    expect(e2.region).toBe("eu");
+    expect(e2.ingressUrl).toBe("https://e2.env.eu.restate.cloud");
+    expect(e2.adminUrl).toBe("https://e2.env.eu.restate.cloud:9070");
+    expect(e2.authToken).toBe(apiKey);
+  });
+
   test("Deploy a Lambda service handler to Restate Cloud environment", () => {
     const app = new cdk.App();
     const stack = new cdk.Stack(app, "RestateCloudStack", {
@@ -49,7 +79,8 @@ describe("Restate constructs", () => {
     const stack = new cdk.Stack(app, "RestateCloudStack", {
       env: { account: "account-id", region: "region" },
     });
-    const serviceDeployer = new ServiceDeployer(stack, "ServiceDeployer", {
+
+    new ServiceDeployer(stack, "ServiceDeployer", {
       // only needed in testing, where the relative path of the registration function is different from how customers would use it
       entry: "dist/register-service-handler/index.js",
       bundling: {
