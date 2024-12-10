@@ -15,7 +15,7 @@ import {
 import { FargateRestateDeployment } from "../lib/restate-constructs";
 
 describe("Restate constructs", () => {
-  test("Cloud Environment API", () => {
+  test("Restate Cloud Environment construct", () => {
     const app = new cdk.App();
     const stack = new cdk.Stack(app, "RestateCloudStack", {
       env: { account: "account-id", region: "region" },
@@ -43,6 +43,44 @@ describe("Restate constructs", () => {
     expect(e2.ingressUrl).toBe("https://e2.env.eu.restate.cloud");
     expect(e2.adminUrl).toBe("https://e2.env.eu.restate.cloud:9070");
     expect(e2.authToken).toBe(apiKey);
+
+    expect(stack).toMatchCdkSnapshot({
+      ignoreAssets: true,
+      yaml: true,
+    });
+  });
+
+  test("Reference an existing Cloud Environment", () => {
+    const app = new cdk.App();
+    const stack = new cdk.Stack(app, "RestateCloudStack", {
+      env: { account: "account-id", region: "region" },
+    });
+    const apiKey = secrets.Secret.fromSecretNameV2(stack, "CloudApiKey", "secret_name");
+
+    const invokerRole = iam.Role.fromRoleArn(stack, "InvokerRole", "arn:aws:iam::654654156625:role/Invoker");
+
+    // Construct a Cloud environment from a known attributes
+    const cloudEnvironment = RestateCloudEnvironment.fromAttributes({
+      environmentId: "env_e1",
+      apiKey,
+      invokerRole,
+      region: "eu",
+    });
+
+    expect(cloudEnvironment.adminUrl).toBe("https://e1.env.eu.restate.cloud:9070");
+    expect(cloudEnvironment.authToken).toBe(apiKey);
+
+    const handler = mockHandler(stack);
+    const serviceDeployer = new ServiceDeployer(stack, "ServiceDeployer", {
+      // only needed in testing, where the relative path of the registration function is different from how customers would use it
+      entry: "dist/register-service-handler/index.js",
+    });
+    serviceDeployer.register(handler.currentVersion, cloudEnvironment);
+
+    expect(stack).toMatchCdkSnapshot({
+      ignoreAssets: true,
+      yaml: true,
+    });
   });
 
   test("Deploy a Lambda service handler to Restate Cloud environment", () => {
@@ -56,12 +94,7 @@ describe("Restate constructs", () => {
       apiKey: secrets.Secret.fromSecretNameV2(stack, "CloudApiKey", "secret_name"),
     });
 
-    const handler: lambda.Function = new lambda.Function(stack, "RestateServiceHandler", {
-      runtime: lambda.Runtime.NODEJS_LATEST,
-      handler: "index.handler",
-      code: lambda.Code.fromInline("{ ... }"),
-    });
-
+    const handler = mockHandler(stack);
     const serviceDeployer = new ServiceDeployer(stack, "ServiceDeployer", {
       // only needed in testing, where the relative path of the registration function is different from how customers would use it
       entry: "dist/register-service-handler/index.js",
@@ -181,3 +214,11 @@ describe("Restate constructs", () => {
     });
   });
 });
+
+function mockHandler(stack: cdk.Stack): lambda.Function {
+  return new lambda.Function(stack, "RestateServiceHandler", {
+    runtime: lambda.Runtime.NODEJS_LATEST,
+    handler: "index.handler",
+    code: lambda.Code.fromInline("{ ... }"),
+  });
+}

@@ -40,12 +40,12 @@ export interface RestateCloudEnvironmentProps {
  * [Restate Cloud](https://cloud.restate.dev/) hosted service.
  */
 export class RestateCloudEnvironment extends Construct implements IRestateEnvironment {
-  public readonly environmentId: EnvironmentId;
-  public readonly adminUrl: string;
-  public readonly ingressUrl: string;
-  public readonly authToken: secrets.ISecret;
-  public readonly invokerRole: iam.IRole;
-  public readonly region: RestateCloudRegion;
+  readonly environmentId: EnvironmentId;
+  readonly adminUrl: string;
+  readonly ingressUrl: string;
+  readonly authToken: secrets.ISecret;
+  readonly invokerRole: iam.IRole;
+  readonly region: RestateCloudRegion;
 
   /**
    * Constructs a Restate Cloud environment reference along with invoker. Note that this construct is only a pointer to
@@ -67,6 +67,28 @@ export class RestateCloudEnvironment extends Construct implements IRestateEnviro
     this.authToken = props.apiKey;
     this.adminUrl = adminEndpoint(this.region, props.environmentId);
     this.ingressUrl = ingressEndpoint(this.region, props.environmentId);
+  }
+
+  /**
+   * Creates a reference to an existing Restate Cloud environment. Unlike instantiating the construct, this variant does
+   * not attempt to create an invoker role, but still returns an Environment object which can be used to deploy
+   * services.
+   *
+   * @param props environment properties - only `environmentId` and `authToken` are required
+   */
+  static fromAttributes(props: {
+    environmentId: EnvironmentId;
+    apiKey: secrets.ISecret;
+    invokerRole: iam.IRole;
+    region?: RestateCloudRegion;
+    adminUrl?: string;
+  }) {
+    const region = props?.region ?? RESTATE_CLOUD_REGION_US;
+    return RestateEnvironment.fromAttributes({
+      invokerRole: props?.invokerRole,
+      adminUrl: props?.adminUrl ?? adminEndpoint(region, props.environmentId),
+      authToken: props?.apiKey,
+    });
   }
 
   /**
