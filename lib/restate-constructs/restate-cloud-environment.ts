@@ -30,7 +30,7 @@ export interface RestateCloudEnvironmentProps {
   readonly apiKey: secrets.ISecret;
 
   /**
-   * Region of the environment. Defaults to "us".
+   * Region of the environment. Defaults to `us`. Valid values: [`us`, `eu`].
    */
   readonly region?: RestateCloudRegion;
 }
@@ -40,6 +40,7 @@ export interface RestateCloudEnvironmentProps {
  * [Restate Cloud](https://cloud.restate.dev/) hosted service.
  */
 export class RestateCloudEnvironment extends Construct implements IRestateEnvironment {
+  readonly environmentId: EnvironmentId;
   readonly adminUrl: string;
   readonly ingressUrl: string;
   readonly authToken: secrets.ISecret;
@@ -60,11 +61,34 @@ export class RestateCloudEnvironment extends Construct implements IRestateEnviro
    */
   constructor(scope: Construct, id: string, props: RestateCloudEnvironmentProps) {
     super(scope, id);
+    this.environmentId = props.environmentId;
     this.region = props.region ?? RESTATE_CLOUD_REGION_US;
     this.invokerRole = this.createInvokerRole(this, props);
     this.authToken = props.apiKey;
     this.adminUrl = adminEndpoint(this.region, props.environmentId);
     this.ingressUrl = ingressEndpoint(this.region, props.environmentId);
+  }
+
+  /**
+   * Creates a reference to an existing Restate Cloud environment. Unlike instantiating the construct, this variant does
+   * not attempt to create an invoker role, but still returns an Environment object which can be used to deploy
+   * services.
+   *
+   * @param props environment properties - only `environmentId` and `authToken` are required
+   */
+  static fromAttributes(props: {
+    environmentId: EnvironmentId;
+    apiKey: secrets.ISecret;
+    invokerRole: iam.IRole;
+    region?: RestateCloudRegion;
+    adminUrl?: string;
+  }) {
+    const region = props?.region ?? RESTATE_CLOUD_REGION_US;
+    return RestateEnvironment.fromAttributes({
+      invokerRole: props?.invokerRole,
+      adminUrl: props?.adminUrl ?? adminEndpoint(region, props.environmentId),
+      authToken: props?.apiKey,
+    });
   }
 
   /**
@@ -102,7 +126,7 @@ function ingressEndpoint(region: RestateCloudRegion, environmentId: EnvironmentI
 }
 
 export type EnvironmentId = `env_${string}`;
-type RestateCloudRegion = "us" | "eu";
+export type RestateCloudRegion = "us" | "eu";
 
 interface RegionConfig {
   accountId: string;
