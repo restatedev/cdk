@@ -50,8 +50,8 @@ export class RestateCloudEnvironment extends Construct implements IRestateEnviro
   /**
    * Constructs a Restate Cloud environment reference along with invoker. Note that this construct is only a pointer to
    * an existing Restate Cloud environment and does not create it. However, it does create an invoker role that is used
-   * invoking Lambda service handlers. If you would prefer to directly manage the invoker role permissions, you can
-   * override the {@link createInvokerRole} method or construct one yourself and define the environment properties with
+   * invoking Lambda service handlers. If you prefer to directly manage the invoker role permissions, you can override
+   * the {@link createInvokerRole} method or construct one yourself and define the environment properties with
    * {@link RestateEnvironment.fromAttributes} directly.
    *
    * @param scope parent construct
