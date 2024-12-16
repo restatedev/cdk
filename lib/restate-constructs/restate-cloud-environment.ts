@@ -74,7 +74,7 @@ export class RestateCloudEnvironment extends Construct implements IRestateEnviro
    * not attempt to create an invoker role, but still returns an Environment object which can be used to deploy
    * services.
    *
-   * @param props environment properties - only `environmentId` and `authToken` are required
+   * @param props environment properties - only `environmentId` and `apiKey` are required
    */
   static fromAttributes(props: {
     environmentId: EnvironmentId;
