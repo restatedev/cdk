@@ -12,7 +12,7 @@
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as secrets from "aws-cdk-lib/aws-secretsmanager";
 import { Construct } from "constructs";
-import { IRestateEnvironment, RestateEnvironment } from "./restate-environment";
+import { IRestateEnvironment } from "./restate-environment";
 import { ServiceDeployer } from "./service-deployer";
 
 /**
@@ -30,9 +30,15 @@ export interface RestateCloudEnvironmentProps {
   readonly apiKey: secrets.ISecret;
 
   /**
-   * Region of the environment. Defaults to "us".
+   * Region of the environment. Defaults to `us`. Valid values: [`us`, `eu`].
    */
   readonly region?: RestateCloudRegion;
+
+  /**
+   * Invoker role that can be assumed by Restate Cloud. If you use {@link ServiceDeployer} to register Lambda functions
+   * as handlers, the necessary invoke permissions will be granted automatically.
+   */
+  readonly invokerRole?: iam.IRole;
 }
 
 /**
@@ -40,6 +46,7 @@ export interface RestateCloudEnvironmentProps {
  * [Restate Cloud](https://cloud.restate.dev/) hosted service.
  */
 export class RestateCloudEnvironment extends Construct implements IRestateEnvironment {
+  readonly environmentId: EnvironmentId;
   readonly adminUrl: string;
   readonly ingressUrl: string;
   readonly authToken: secrets.ISecret;
@@ -48,10 +55,8 @@ export class RestateCloudEnvironment extends Construct implements IRestateEnviro
 
   /**
    * Constructs a Restate Cloud environment reference along with invoker. Note that this construct is only a pointer to
-   * an existing Restate Cloud environment and does not create it. However, it does create an invoker role that is used
-   * invoking Lambda service handlers. If you would prefer to directly manage the invoker role permissions, you can
-   * override the {@link createInvokerRole} method or construct one yourself and define the environment properties with
-   * {@link RestateEnvironment.fromAttributes} directly.
+   * an existing Restate Cloud environment and does not create it. Unless the `invokerRole` property is specified, it
+   * does create a new role that can be assumed by Restate Cloud, which is used to the service handlers.
    *
    * @param scope parent construct
    * @param id construct id
@@ -60,8 +65,9 @@ export class RestateCloudEnvironment extends Construct implements IRestateEnviro
    */
   constructor(scope: Construct, id: string, props: RestateCloudEnvironmentProps) {
     super(scope, id);
+    this.environmentId = props.environmentId;
     this.region = props.region ?? RESTATE_CLOUD_REGION_US;
-    this.invokerRole = this.createInvokerRole(this, props);
+    this.invokerRole = props.invokerRole ?? this.createInvokerRole(this, props);
     this.authToken = props.apiKey;
     this.adminUrl = adminEndpoint(this.region, props.environmentId);
     this.ingressUrl = ingressEndpoint(this.region, props.environmentId);
@@ -102,7 +108,7 @@ function ingressEndpoint(region: RestateCloudRegion, environmentId: EnvironmentI
 }
 
 export type EnvironmentId = `env_${string}`;
-type RestateCloudRegion = "us" | "eu";
+export type RestateCloudRegion = "us" | "eu";
 
 interface RegionConfig {
   accountId: string;

@@ -1768,6 +1768,282 @@ Mappings:
 "
 `;
 
+exports[`Restate constructs Restate Cloud Environment construct 1`] = `
+"Resources:
+  e1InvokerRoleEEC53B29:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: 'sts:AssumeRole'
+            Condition:
+              StringEquals:
+                'sts:ExternalId': env_e1
+                'aws:PrincipalArn': 'arn:aws:iam::654654156625:role/RestateCloud'
+            Effect: Allow
+            Principal:
+              AWS:
+                'Fn::Join':
+                  - ''
+                  - - 'arn:'
+                    - Ref: 'AWS::Partition'
+                    - ':iam::654654156625:root'
+          - Action: 'sts:TagSession'
+            Effect: Allow
+            Principal:
+              AWS:
+                'Fn::Join':
+                  - ''
+                  - - 'arn:'
+                    - Ref: 'AWS::Partition'
+                    - ':iam::654654156625:root'
+        Version: '2012-10-17'
+  e2InvokerRoleFFCF8E05:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: 'sts:AssumeRole'
+            Condition:
+              StringEquals:
+                'sts:ExternalId': env_e2
+                'aws:PrincipalArn': 'arn:aws:iam::654654156625:role/RestateCloud'
+            Effect: Allow
+            Principal:
+              AWS:
+                'Fn::Join':
+                  - ''
+                  - - 'arn:'
+                    - Ref: 'AWS::Partition'
+                    - ':iam::654654156625:root'
+          - Action: 'sts:TagSession'
+            Effect: Allow
+            Principal:
+              AWS:
+                'Fn::Join':
+                  - ''
+                  - - 'arn:'
+                    - Ref: 'AWS::Partition'
+                    - ':iam::654654156625:root'
+        Version: '2012-10-17'
+"
+`;
+
+exports[`Restate constructs Restate Cloud Environment construct with role reference 1`] = `
+"Resources:
+  RestateServiceHandlerServiceRole07B26D05:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: 'sts:AssumeRole'
+            Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+        Version: '2012-10-17'
+      ManagedPolicyArns:
+        - 'Fn::Join':
+            - ''
+            - - 'arn:'
+              - Ref: 'AWS::Partition'
+              - ':iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
+  RestateServiceHandler71409CD7:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      Code: Any<Object>
+      Handler: index.handler
+      Role:
+        'Fn::GetAtt':
+          - RestateServiceHandlerServiceRole07B26D05
+          - Arn
+      Runtime: nodejs18.x
+    DependsOn:
+      - RestateServiceHandlerServiceRole07B26D05
+  RestateServiceHandlerCurrentVersion40030E671fc2ba09c2d7b4ea8c6a3f8fee895a65:
+    Type: 'AWS::Lambda::Version'
+    Properties:
+      FunctionName:
+        Ref: RestateServiceHandler71409CD7
+  RestateServiceHandlerCurrentVersionRestateDeploymentE8F102EB:
+    Type: 'Custom::RestateServiceDeployment'
+    Properties:
+      ServiceToken:
+        'Fn::GetAtt':
+          - ServiceDeployerCustomResourceProviderframeworkonEvent528FE6C2
+          - Arn
+      adminUrl: 'https://e1.env.eu.restate.cloud:9070'
+      authTokenSecretArn:
+        'Fn::Join':
+          - ''
+          - - 'arn:'
+            - Ref: 'AWS::Partition'
+            - ':secretsmanager:region:account-id:secret:secret_name'
+      serviceLambdaArn:
+        Ref: >-
+          RestateServiceHandlerCurrentVersion40030E671fc2ba09c2d7b4ea8c6a3f8fee895a65
+      invokeRoleArn: 'arn:aws:iam::654654156625:role/Invoker'
+      removalPolicy: retain
+      private: 'false'
+      insecure: 'false'
+    DependsOn:
+      - ServiceDeployerInvocationPolicyD09B639D
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+  ServiceDeployerEventHandlerServiceRoleF133584F:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: 'sts:AssumeRole'
+            Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+        Version: '2012-10-17'
+      ManagedPolicyArns:
+        - 'Fn::Join':
+            - ''
+            - - 'arn:'
+              - Ref: 'AWS::Partition'
+              - ':iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
+  ServiceDeployerEventHandlerServiceRoleDefaultPolicyFE2DC3C9:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyDocument:
+        Statement:
+          - Action:
+              - 'secretsmanager:GetSecretValue'
+              - 'secretsmanager:DescribeSecret'
+            Effect: Allow
+            Resource:
+              'Fn::Join':
+                - ''
+                - - 'arn:'
+                  - Ref: 'AWS::Partition'
+                  - ':secretsmanager:region:account-id:secret:secret_name-??????'
+        Version: '2012-10-17'
+      PolicyName: ServiceDeployerEventHandlerServiceRoleDefaultPolicyFE2DC3C9
+      Roles:
+        - Ref: ServiceDeployerEventHandlerServiceRoleF133584F
+  ServiceDeployerEventHandler89EAD25F:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      Architectures:
+        - arm64
+      Code: Any<Object>
+      Description: Restate custom registration handler
+      Environment:
+        Variables:
+          NODE_OPTIONS: '--enable-source-maps'
+      Handler: index.handler
+      MemorySize: 128
+      Role:
+        'Fn::GetAtt':
+          - ServiceDeployerEventHandlerServiceRoleF133584F
+          - Arn
+      Runtime: nodejs18.x
+      Timeout: 180
+    DependsOn:
+      - ServiceDeployerEventHandlerServiceRoleDefaultPolicyFE2DC3C9
+      - ServiceDeployerEventHandlerServiceRoleF133584F
+  ServiceDeployerDeploymentLogs5B8BE5D2:
+    Type: 'AWS::Logs::LogGroup'
+    Properties:
+      LogGroupName:
+        'Fn::Join':
+          - ''
+          - - /aws/lambda/
+            - Ref: ServiceDeployerEventHandler89EAD25F
+      RetentionInDays: 30
+    UpdateReplacePolicy: Retain
+    DeletionPolicy: RetainExceptOnCreate
+  ServiceDeployerCustomResourceProviderframeworkonEventServiceRole865AFB0C:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: 'sts:AssumeRole'
+            Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+        Version: '2012-10-17'
+      ManagedPolicyArns:
+        - 'Fn::Join':
+            - ''
+            - - 'arn:'
+              - Ref: 'AWS::Partition'
+              - ':iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
+  ServiceDeployerCustomResourceProviderframeworkonEventServiceRoleDefaultPolicy740A65C9:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyDocument:
+        Statement:
+          - Action: 'lambda:InvokeFunction'
+            Effect: Allow
+            Resource:
+              - 'Fn::GetAtt':
+                  - ServiceDeployerEventHandler89EAD25F
+                  - Arn
+              - 'Fn::Join':
+                  - ''
+                  - - 'Fn::GetAtt':
+                        - ServiceDeployerEventHandler89EAD25F
+                        - Arn
+                    - ':*'
+        Version: '2012-10-17'
+      PolicyName: >-
+        ServiceDeployerCustomResourceProviderframeworkonEventServiceRoleDefaultPolicy740A65C9
+      Roles:
+        - Ref: >-
+            ServiceDeployerCustomResourceProviderframeworkonEventServiceRole865AFB0C
+  ServiceDeployerCustomResourceProviderframeworkonEvent528FE6C2:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      Code: Any<Object>
+      Description: >-
+        AWS CDK resource provider framework - onEvent
+        (RestateCloudStack/ServiceDeployer/CustomResourceProvider)
+      Environment:
+        Variables:
+          USER_ON_EVENT_FUNCTION_ARN:
+            'Fn::GetAtt':
+              - ServiceDeployerEventHandler89EAD25F
+              - Arn
+      Handler: framework.onEvent
+      Role:
+        'Fn::GetAtt':
+          - >-
+            ServiceDeployerCustomResourceProviderframeworkonEventServiceRole865AFB0C
+          - Arn
+      Runtime: nodejs18.x
+      Timeout: 900
+    DependsOn:
+      - >-
+        ServiceDeployerCustomResourceProviderframeworkonEventServiceRoleDefaultPolicy740A65C9
+      - ServiceDeployerCustomResourceProviderframeworkonEventServiceRole865AFB0C
+  ServiceDeployerInvocationPolicyD09B639D:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyDocument:
+        Statement:
+          - Action: 'lambda:InvokeFunction'
+            Effect: Allow
+            Resource:
+              - 'Fn::GetAtt':
+                  - RestateServiceHandler71409CD7
+                  - Arn
+              - 'Fn::Join':
+                  - ''
+                  - - 'Fn::GetAtt':
+                        - RestateServiceHandler71409CD7
+                        - Arn
+                    - ':*'
+        Version: '2012-10-17'
+      PolicyName: ServiceDeployerInvocationPolicyD09B639D
+      Roles:
+        - Invoker
+"
+`;
+
 exports[`Restate constructs Service Deployer overrides 1`] = `
 "Resources:
   ServiceDeployerEventHandlerServiceRoleF133584F:
