@@ -50,7 +50,7 @@ describe("Restate constructs", () => {
     });
   });
 
-  test("Reference an existing Cloud Environment", () => {
+  test("Restate Cloud Environment construct with role reference", () => {
     const app = new cdk.App();
     const stack = new cdk.Stack(app, "RestateCloudStack", {
       env: { account: "account-id", region: "region" },
@@ -59,8 +59,7 @@ describe("Restate constructs", () => {
 
     const invokerRole = iam.Role.fromRoleArn(stack, "InvokerRole", "arn:aws:iam::654654156625:role/Invoker");
 
-    // Construct a Cloud environment from a known attributes
-    const cloudEnvironment = RestateCloudEnvironment.fromAttributes({
+    const cloudEnvironment = new RestateCloudEnvironment(stack, "e1", {
       environmentId: "env_e1",
       apiKey,
       invokerRole,

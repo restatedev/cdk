@@ -1768,7 +1768,68 @@ Mappings:
 "
 `;
 
-exports[`Restate constructs Reference an existing Cloud Environment 1`] = `
+exports[`Restate constructs Restate Cloud Environment construct 1`] = `
+"Resources:
+  e1InvokerRoleEEC53B29:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: 'sts:AssumeRole'
+            Condition:
+              StringEquals:
+                'sts:ExternalId': env_e1
+                'aws:PrincipalArn': 'arn:aws:iam::654654156625:role/RestateCloud'
+            Effect: Allow
+            Principal:
+              AWS:
+                'Fn::Join':
+                  - ''
+                  - - 'arn:'
+                    - Ref: 'AWS::Partition'
+                    - ':iam::654654156625:root'
+          - Action: 'sts:TagSession'
+            Effect: Allow
+            Principal:
+              AWS:
+                'Fn::Join':
+                  - ''
+                  - - 'arn:'
+                    - Ref: 'AWS::Partition'
+                    - ':iam::654654156625:root'
+        Version: '2012-10-17'
+  e2InvokerRoleFFCF8E05:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: 'sts:AssumeRole'
+            Condition:
+              StringEquals:
+                'sts:ExternalId': env_e2
+                'aws:PrincipalArn': 'arn:aws:iam::654654156625:role/RestateCloud'
+            Effect: Allow
+            Principal:
+              AWS:
+                'Fn::Join':
+                  - ''
+                  - - 'arn:'
+                    - Ref: 'AWS::Partition'
+                    - ':iam::654654156625:root'
+          - Action: 'sts:TagSession'
+            Effect: Allow
+            Principal:
+              AWS:
+                'Fn::Join':
+                  - ''
+                  - - 'arn:'
+                    - Ref: 'AWS::Partition'
+                    - ':iam::654654156625:root'
+        Version: '2012-10-17'
+"
+`;
+
+exports[`Restate constructs Restate Cloud Environment construct with role reference 1`] = `
 "Resources:
   RestateServiceHandlerServiceRole07B26D05:
     Type: 'AWS::IAM::Role'
@@ -1980,67 +2041,6 @@ exports[`Restate constructs Reference an existing Cloud Environment 1`] = `
       PolicyName: ServiceDeployerInvocationPolicyD09B639D
       Roles:
         - Invoker
-"
-`;
-
-exports[`Restate constructs Restate Cloud Environment construct 1`] = `
-"Resources:
-  e1InvokerRoleEEC53B29:
-    Type: 'AWS::IAM::Role'
-    Properties:
-      AssumeRolePolicyDocument:
-        Statement:
-          - Action: 'sts:AssumeRole'
-            Condition:
-              StringEquals:
-                'sts:ExternalId': env_e1
-                'aws:PrincipalArn': 'arn:aws:iam::654654156625:role/RestateCloud'
-            Effect: Allow
-            Principal:
-              AWS:
-                'Fn::Join':
-                  - ''
-                  - - 'arn:'
-                    - Ref: 'AWS::Partition'
-                    - ':iam::654654156625:root'
-          - Action: 'sts:TagSession'
-            Effect: Allow
-            Principal:
-              AWS:
-                'Fn::Join':
-                  - ''
-                  - - 'arn:'
-                    - Ref: 'AWS::Partition'
-                    - ':iam::654654156625:root'
-        Version: '2012-10-17'
-  e2InvokerRoleFFCF8E05:
-    Type: 'AWS::IAM::Role'
-    Properties:
-      AssumeRolePolicyDocument:
-        Statement:
-          - Action: 'sts:AssumeRole'
-            Condition:
-              StringEquals:
-                'sts:ExternalId': env_e2
-                'aws:PrincipalArn': 'arn:aws:iam::654654156625:role/RestateCloud'
-            Effect: Allow
-            Principal:
-              AWS:
-                'Fn::Join':
-                  - ''
-                  - - 'arn:'
-                    - Ref: 'AWS::Partition'
-                    - ':iam::654654156625:root'
-          - Action: 'sts:TagSession'
-            Effect: Allow
-            Principal:
-              AWS:
-                'Fn::Join':
-                  - ''
-                  - - 'arn:'
-                    - Ref: 'AWS::Partition'
-                    - ':iam::654654156625:root'
-        Version: '2012-10-17'
 "
 `;
 
