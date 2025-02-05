@@ -24,7 +24,7 @@ jobs:
       - run: npm run build
       - run: npm run test
       - run: mv $(npm pack) restatedev-restate-cdk.tgz
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: restatedev-restate-cdk
           path: restatedev-restate-cdk.tgz
