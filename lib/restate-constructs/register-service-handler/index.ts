@@ -193,7 +193,7 @@ export const handler: Handler<CloudFormationCustomResourceEvent, void> = async f
 
         if (props.servicePath && !response.services.find((s) => s.name === props.servicePath)) {
           failureReason =
-            "Registration succeeded, but none the services names in the deployment matched the specified name. " +
+            "Registration succeeded, but none of the service names in the deployment match the specified name. " +
             `Expected "${props.servicePath}", got back: [` +
             response.services.map((svc) => svc?.name).join(", ") +
             "]";
