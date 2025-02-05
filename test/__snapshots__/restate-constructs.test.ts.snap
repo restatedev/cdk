@@ -2069,7 +2069,7 @@ exports[`Restate constructs Service Deployer overrides 1`] = `
         - arm64
       Code:
         S3Bucket: cdk-hnb659fds-assets-account-id-region
-        S3Key: de0ef7032f41b10781eb674cc361498b642c0f479b29716d92a949bb5e7f94f3.zip
+        S3Key: efc7f8d9d681a05675ab384997aaabc138c22aef63a3b0335735af00081d9a9a.zip
       Description: Restate custom registration handler
       Environment:
         Variables:
@@ -2139,7 +2139,7 @@ exports[`Restate constructs Service Deployer overrides 1`] = `
     Properties:
       Code:
         S3Bucket: cdk-hnb659fds-assets-account-id-region
-        S3Key: 4dc48ffba382f93077a1e6824599bbd4ceb6f91eb3d9442eca3b85bdb1a20b1e.zip
+        S3Key: bdc104ed9cab1b5b6421713c8155f0b753380595356f710400609664d3635eca.zip
       Description: >-
         AWS CDK resource provider framework - onEvent
         (RestateCloudStack/ServiceDeployer/CustomResourceProvider)
