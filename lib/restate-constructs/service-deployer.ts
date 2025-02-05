@@ -126,6 +126,7 @@ export class ServiceDeployer extends Construct {
       bundling: props?.bundling ?? {
         minify: false,
         sourceMap: true,
+        externalModules: ["@aws-sdk/*", "aws-sdk"],
       },
       ...(props?.vpc
         ? ({
@@ -210,7 +211,7 @@ export class ServiceDeployer extends Construct {
         authTokenSecretArn: authToken?.secretArn,
         serviceLambdaArn: handler.functionArn,
         invokeRoleArn: environment.invokerRole?.roleArn,
-        removalPolicy: cdk.RemovalPolicy.RETAIN,
+        // removalPolicy: "retain",
         private: (options?.private ?? false).toString() as "true" | "false",
         configurationVersion:
           options?.configurationVersion || handler.functionArn.endsWith(":$LATEST")

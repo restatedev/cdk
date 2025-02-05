@@ -12,7 +12,6 @@
 import { Handler } from "aws-lambda/handler";
 import { CloudFormationCustomResourceEvent } from "aws-lambda/trigger/cloudformation-custom-resource";
 import fetch from "node-fetch";
-import * as cdk from "aws-cdk-lib";
 import { GetSecretValueCommand, SecretsManagerClient } from "@aws-sdk/client-secrets-manager";
 import { randomInt } from "crypto";
 import * as https from "node:https";
@@ -52,7 +51,7 @@ export interface RegistrationProperties {
   /** Whether to trust any certificate when connecting to the admin endpoint. */
   insecure?: "true" | "false";
 
-  removalPolicy?: cdk.RemovalPolicy;
+  // removalPolicy?: string;
 }
 
 type RegisterDeploymentResponse = {
