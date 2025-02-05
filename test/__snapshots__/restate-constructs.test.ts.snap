@@ -1266,7 +1266,6 @@ exports[`Restate constructs Deploy a Lambda service handler to Restate Cloud env
         'Fn::GetAtt':
           - RestateInvokerRole42565598
           - Arn
-      removalPolicy: retain
       private: 'false'
       insecure: 'false'
     DependsOn:
@@ -1324,7 +1323,7 @@ exports[`Restate constructs Deploy a Lambda service handler to Restate Cloud env
         'Fn::GetAtt':
           - ServiceDeployerEventHandlerServiceRoleF133584F
           - Arn
-      Runtime: nodejs18.x
+      Runtime: nodejs22.x
       Timeout: 180
     DependsOn:
       - ServiceDeployerEventHandlerServiceRoleDefaultPolicyFE2DC3C9
@@ -1524,7 +1523,6 @@ exports[`Restate constructs Deploy a Lambda service handler to existing Restate 
         'Fn::GetAtt':
           - InvokerRole4DB2757E
           - Arn
-      removalPolicy: retain
       private: 'false'
       insecure: 'false'
     DependsOn:
@@ -1578,7 +1576,7 @@ exports[`Restate constructs Deploy a Lambda service handler to existing Restate 
         'Fn::GetAtt':
           - ServiceDeployerEventHandlerServiceRoleF133584F
           - Arn
-      Runtime: nodejs18.x
+      Runtime: nodejs22.x
       Timeout: 180
     DependsOn:
       - ServiceDeployerEventHandlerServiceRoleDefaultPolicyFE2DC3C9
@@ -1882,7 +1880,6 @@ exports[`Restate constructs Restate Cloud Environment construct with role refere
         Ref: >-
           RestateServiceHandlerCurrentVersion40030E671fc2ba09c2d7b4ea8c6a3f8fee895a65
       invokeRoleArn: 'arn:aws:iam::654654156625:role/Invoker'
-      removalPolicy: retain
       private: 'false'
       insecure: 'false'
     DependsOn:
@@ -1940,7 +1937,7 @@ exports[`Restate constructs Restate Cloud Environment construct with role refere
         'Fn::GetAtt':
           - ServiceDeployerEventHandlerServiceRoleF133584F
           - Arn
-      Runtime: nodejs18.x
+      Runtime: nodejs22.x
       Timeout: 180
     DependsOn:
       - ServiceDeployerEventHandlerServiceRoleDefaultPolicyFE2DC3C9
@@ -2069,7 +2066,7 @@ exports[`Restate constructs Service Deployer overrides 1`] = `
         - arm64
       Code:
         S3Bucket: cdk-hnb659fds-assets-account-id-region
-        S3Key: efc7f8d9d681a05675ab384997aaabc138c22aef63a3b0335735af00081d9a9a.zip
+        S3Key: 7c53a580f65616cf4ae29ac9b381d44124f1f8566f9708c0d2226a75abf4355e.zip
       Description: Restate custom registration handler
       Environment:
         Variables:
@@ -2080,7 +2077,7 @@ exports[`Restate constructs Service Deployer overrides 1`] = `
         'Fn::GetAtt':
           - ServiceDeployerEventHandlerServiceRoleF133584F
           - Arn
-      Runtime: nodejs18.x
+      Runtime: nodejs22.x
       Timeout: 180
     DependsOn:
       - ServiceDeployerEventHandlerServiceRoleF133584F

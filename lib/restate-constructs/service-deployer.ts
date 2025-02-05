@@ -97,7 +97,9 @@ export class ServiceDeployer extends Construct {
       lambda_node.NodejsFunctionProps,
       | "allowPublicSubnet"
       | "architecture"
+      | "runtime"
       | "bundling"
+      | "depsLockFilePath"
       | "code"
       | "entry"
       | "functionName"
@@ -117,7 +119,7 @@ export class ServiceDeployer extends Construct {
       description: "Restate custom registration handler",
       entry: props?.entry ?? path.join(__dirname, "register-service-handler/index.js"),
       architecture: props?.architecture ?? lambda.Architecture.ARM_64,
-      runtime: lambda.Runtime.NODEJS_LATEST,
+      runtime: props?.runtime ?? lambda.Runtime.NODEJS_22_X,
       memorySize: 128,
       timeout: props?.timeout ?? DEFAULT_TIMEOUT,
       environment: {
@@ -126,7 +128,11 @@ export class ServiceDeployer extends Construct {
       bundling: props?.bundling ?? {
         minify: false,
         sourceMap: true,
+        externalModules: ["@aws-sdk/*", "aws-sdk"],
+        platform: "node",
+        target: "node22",
       },
+      depsLockFilePath: props?.depsLockFilePath,
       ...(props?.vpc
         ? ({
             vpc: props?.vpc,
@@ -210,7 +216,7 @@ export class ServiceDeployer extends Construct {
         authTokenSecretArn: authToken?.secretArn,
         serviceLambdaArn: handler.functionArn,
         invokeRoleArn: environment.invokerRole?.roleArn,
-        removalPolicy: cdk.RemovalPolicy.RETAIN,
+        // removalPolicy: "retain",
         private: (options?.private ?? false).toString() as "true" | "false",
         configurationVersion:
           options?.configurationVersion || handler.functionArn.endsWith(":$LATEST")
