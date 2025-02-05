@@ -99,6 +99,7 @@ export class ServiceDeployer extends Construct {
       | "architecture"
       | "runtime"
       | "bundling"
+      | "depsLockFilePath"
       | "code"
       | "entry"
       | "functionName"
@@ -131,6 +132,7 @@ export class ServiceDeployer extends Construct {
         platform: "node",
         target: "node22",
       },
+      depsLockFilePath: props?.depsLockFilePath,
       ...(props?.vpc
         ? ({
             vpc: props?.vpc,
