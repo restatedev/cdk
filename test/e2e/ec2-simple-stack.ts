@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2023-2025 - Restate Software, Inc., Restate GmbH
  *
- * This file is part of the Restate SDK for Node.js/TypeScript,
+ * This file is part of the Restate CDK Construct Library,
  * which is released under the MIT license.
  *
  * You can find a copy of the license in file LICENSE in the root
