@@ -40,6 +40,11 @@ jobs:
 
       - run: npm run build
       - run: npm run test
-      - run: npm publish --tag latest --access public
+      - run: |
+          if [[ ${{ github.event.release.prerelease }} == true ]]; then
+            npm publish --tag next --access public
+          else
+            npm publish --tag latest --access public
+          fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
