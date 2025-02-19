@@ -1,18 +1,29 @@
+/*
+ * Copyright (c) 2023-2025 - Restate Software, Inc., Restate GmbH
+ *
+ * This file is part of the Restate CDK Construct Library,
+ * which is released under the MIT license.
+ *
+ * You can find a copy of the license in file LICENSE in the root
+ * directory of this repository or package, or at
+ * https://github.com/restatedev/cdk/blob/main/LICENSE
+ */
+
 import * as cdk from "aws-cdk-lib";
 import * as ec2 from "aws-cdk-lib/aws-ec2";
-import * as lambda from "aws-cdk-lib/aws-lambda";
-import * as secrets from "aws-cdk-lib/aws-secretsmanager";
 import * as iam from "aws-cdk-lib/aws-iam";
+import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as route53 from "aws-cdk-lib/aws-route53";
+import * as secrets from "aws-cdk-lib/aws-secretsmanager";
 import "jest-cdk-snapshot";
 import {
+  FargateRestateDeployment,
   RestateCloudEnvironment,
   RestateEnvironment,
   ServiceDeployer,
   SingleNodeRestateDeployment,
   TlsTermination,
 } from "../lib/restate-constructs";
-import { FargateRestateDeployment } from "../lib/restate-constructs";
 
 describe("Restate constructs", () => {
   test("Restate Cloud Environment construct", () => {
@@ -172,6 +183,9 @@ describe("Restate constructs", () => {
     new SingleNodeRestateDeployment(stack, "Restate", {
       vpc: ec2.Vpc.fromLookup(stack, "Vpc", { isDefault: true }),
       restateTag: "custom-version",
+      environment: {
+        RESTATE_INGRESS__ADVERTISED_INGRESS_ENDPOINT: "http://restate-ingress",
+      },
     });
 
     expect(stack).toMatchCdkSnapshot({
