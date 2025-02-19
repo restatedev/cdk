@@ -24,7 +24,8 @@ jobs:
       - run: npm ci
 
       - name: Extract tag version
-        run: echo "TAG_VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+        # expected tag format is vX.Y.Z
+        run: echo "TAG_VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_ENV
 
       - name: Update package version
         run: npm version $TAG_VERSION --no-git-tag-version
