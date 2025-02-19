@@ -20,7 +20,8 @@
     "prebundle": "rm -rf dist",
     "postbundle": "cd dist && zip -r index.zip index.js*",
     "watch": "tsc -w",
-    "test": "jest",
+    "test": "jest --config jest.config.js",
+    "test:e2e": "npx tsx test/handlers/build.mts && jest --config jest.config.e2e.js",
     "lint": "npx prettier --check .",
     "cdk": "cdk"
   },
@@ -37,7 +38,8 @@
     "source-map-support": "^0.5.21",
     "ts-jest": "^29.2.5",
     "tsx": "^4.19.2",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "zx": "^8.3.2"
   },
   "peerDependencies": {
     "@aws-sdk/client-secrets-manager": "^3.637.0",

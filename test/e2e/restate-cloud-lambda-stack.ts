@@ -19,7 +19,13 @@ import { EnvironmentId, RestateCloudEnvironment, ServiceDeployer } from "../../l
 
 // Deploy with: RESTATE_ENV_ID=env_... RESTATE_API_KEY=key_... npx cdk --app 'npx tsx restate-cloud.e2e.ts' deploy
 const app = new cdk.App();
-const stack = new cdk.Stack(app, "e2e-RestateCloud");
+const stackName = app.node.tryGetContext("stack_name") ?? "e2e-RestateCloud";
+const stack = new cdk.Stack(app, stackName, {
+  env: {
+    account: process.env.CDK_DEFAULT_ACCOUNT,
+    region: process.env.CDK_DEFAULT_REGION,
+  },
+});
 
 if (!process.env.RESTATE_ENV_ID || !process.env.RESTATE_API_KEY) {
   throw new Error("Please set RESTATE_ENV_ID and RESTATE_API_KEY");
