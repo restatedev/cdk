@@ -1,7 +1,7 @@
 {
   "name": "@restatedev/restate-cdk",
   "description": "Restate.dev CDK constructs",
-  "version": "1.1.0",
+  "version": "1.1.1-pre.6",
   "author": "Restate Developers",
   "license": "MIT",
   "email": "code@restate.dev",
