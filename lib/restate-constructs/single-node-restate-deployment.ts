@@ -84,6 +84,13 @@ export interface SingleNodeRestateProps {
   };
 
   /**
+   * Environment properties to set for Restate. This is a simple way to pass custom configuration parameters.
+   */
+  environment?: {
+    [key: string]: string;
+  };
+
+  /**
    * Completely override the Restate server configuration. Note that other Restate configuration options
    * will effectively be ignored if this is set. See https://docs.restate.dev/operate/configuration/server/
    * for details.
@@ -212,6 +219,15 @@ export class SingleNodeRestateDeployment extends Construct implements IRestateEn
 
     this.tlsEnabled = props.tlsTermination === TlsTermination.ON_HOST_SELF_SIGNED_CERTIFICATE;
 
+    const envDefaults = {
+      RESTATE_OBSERVABILITY__LOG__FORMAT: "Json",
+      RUST_LOG: "info",
+      RESTATE_OBSERVABILITY__TRACING__ENDPOINT: "http://localhost:4317",
+    };
+    const envArgs = Object.entries({ ...envDefaults, ...(props.environment ?? {}) })
+      .map(([key, value]) => `-e ${key}="${value}"`)
+      .join(" ");
+
     const initScript = ec2.UserData.forLinux();
     initScript.addCommands(
       "set -euf -o pipefail",
@@ -236,8 +252,7 @@ export class SingleNodeRestateDeployment extends Construct implements IRestateEn
         " --volume /etc/restate:/etc/restate" +
         " --volume /var/restate:/restate-data" +
         " --network=host" +
-        " -e RESTATE_OBSERVABILITY__LOG__FORMAT=Json -e RUST_LOG=info,restate_worker::partition=warn" +
-        " -e RESTATE_OBSERVABILITY__TRACING__ENDPOINT=http://localhost:4317" +
+        ` ${envArgs}` +
         ` --log-driver=awslogs --log-opt awslogs-group=${logGroup.logGroupName}` +
         ` ${restateImage}:${restateTag}` +
         " --config-file /etc/restate/config.toml",

@@ -128,7 +128,7 @@ export class ServiceDeployer extends Construct {
       bundling: props?.bundling ?? {
         minify: false,
         sourceMap: true,
-        externalModules: ["@aws-sdk/*", "aws-sdk"],
+        externalModules: ["@aws-sdk/*"],
         platform: "node",
         target: "node22",
       },
