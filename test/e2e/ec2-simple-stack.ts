@@ -10,16 +10,15 @@
  */
 
 import * as cdk from "aws-cdk-lib";
+import * as ec2 from "aws-cdk-lib/aws-ec2";
 import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as logs from "aws-cdk-lib/aws-logs";
-import "source-map-support/register";
-
 import { ServiceDeployer, SingleNodeRestateDeployment } from "../../lib/restate-constructs";
-import * as ec2 from "aws-cdk-lib/aws-ec2";
 
-// Deploy with: npx cdk --app 'npx tsx single-node-ec2.e2e.ts' deploy --context vpc_id=...
+// Deploy with: npx cdk --app 'npx tsx ec2-simple-stack.ts' deploy --context vpc_id=...
 const app = new cdk.App();
-const stack = new cdk.Stack(app, "e2e-RestateSingleNode", {
+const stackName = app.node.tryGetContext("stack_name") ?? "e2e-RestateSingleNode";
+const stack = new cdk.Stack(app, stackName, {
   env: {
     account: process.env.CDK_DEFAULT_ACCOUNT,
     region: process.env.CDK_DEFAULT_REGION,
@@ -27,7 +26,7 @@ const stack = new cdk.Stack(app, "e2e-RestateSingleNode", {
 });
 
 const handler: lambda.Function = new lambda.Function(stack, "Service", {
-  runtime: lambda.Runtime.NODEJS_LATEST,
+  runtime: lambda.Runtime.NODEJS_22_X,
   code: lambda.Code.fromAsset("../handlers/dist/"),
   handler: "bundle.handler",
 });
@@ -55,8 +54,8 @@ const environment = new SingleNodeRestateDeployment(stack, "Restate", {
 // Safer option: add the deployer to the VPC + security group
 const deployer = new ServiceDeployer(stack, "ServiceDeployer", {
   vpc: environment.vpc,
-  allowPublicSubnet: true, // necessary to deploy to a public subnet - it's ok, deployer doesn't need the internet
-  securityGroups: [environment.adminSecurityGroup],
+  allowPublicSubnet: true, // necessary to deploy to a public VPC subnet - no internet access but we don't need it
+  securityGroups: [environment.adminSecurityGroup], // the admin SG can access the admin port 9070
   removalPolicy: cdk.RemovalPolicy.DESTROY,
   entry: "../../dist/register-service-handler/index.js", // only needed for in-tree tests
 });
