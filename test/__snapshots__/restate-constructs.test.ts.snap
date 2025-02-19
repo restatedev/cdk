@@ -1372,6 +1372,12 @@ exports[`Restate constructs Deploy a Lambda service handler to Restate Cloud env
                         - ServiceDeployerEventHandler89EAD25F
                         - Arn
                     - ':*'
+          - Action: 'lambda:GetFunction'
+            Effect: Allow
+            Resource:
+              'Fn::GetAtt':
+                - ServiceDeployerEventHandler89EAD25F
+                - Arn
         Version: '2012-10-17'
       PolicyName: >-
         ServiceDeployerCustomResourceProviderframeworkonEventServiceRoleDefaultPolicy740A65C9
@@ -1625,6 +1631,12 @@ exports[`Restate constructs Deploy a Lambda service handler to existing Restate 
                         - ServiceDeployerEventHandler89EAD25F
                         - Arn
                     - ':*'
+          - Action: 'lambda:GetFunction'
+            Effect: Allow
+            Resource:
+              'Fn::GetAtt':
+                - ServiceDeployerEventHandler89EAD25F
+                - Arn
         Version: '2012-10-17'
       PolicyName: >-
         ServiceDeployerCustomResourceProviderframeworkonEventServiceRoleDefaultPolicy740A65C9
@@ -1714,9 +1726,9 @@ Mappings:
     ca-west-1:
       value: nodejs20.x
     cn-north-1:
-      value: nodejs18.x
+      value: nodejs20.x
     cn-northwest-1:
-      value: nodejs18.x
+      value: nodejs20.x
     eu-central-1:
       value: nodejs20.x
     eu-central-2:
@@ -1750,9 +1762,9 @@ Mappings:
     us-east-2:
       value: nodejs20.x
     us-gov-east-1:
-      value: nodejs18.x
+      value: nodejs20.x
     us-gov-west-1:
-      value: nodejs18.x
+      value: nodejs20.x
     us-iso-east-1:
       value: nodejs18.x
     us-iso-west-1:
@@ -1986,6 +1998,12 @@ exports[`Restate constructs Restate Cloud Environment construct with role refere
                         - ServiceDeployerEventHandler89EAD25F
                         - Arn
                     - ':*'
+          - Action: 'lambda:GetFunction'
+            Effect: Allow
+            Resource:
+              'Fn::GetAtt':
+                - ServiceDeployerEventHandler89EAD25F
+                - Arn
         Version: '2012-10-17'
       PolicyName: >-
         ServiceDeployerCustomResourceProviderframeworkonEventServiceRoleDefaultPolicy740A65C9
@@ -2066,7 +2084,7 @@ exports[`Restate constructs Service Deployer overrides 1`] = `
         - arm64
       Code:
         S3Bucket: cdk-hnb659fds-assets-account-id-region
-        S3Key: 7c53a580f65616cf4ae29ac9b381d44124f1f8566f9708c0d2226a75abf4355e.zip
+        S3Key: 9b2f401811d992475d0f265d5bf5fdfd2f1fbbe762760b5674e60f80274bc089.zip
       Description: Restate custom registration handler
       Environment:
         Variables:
@@ -2125,6 +2143,12 @@ exports[`Restate constructs Service Deployer overrides 1`] = `
                         - ServiceDeployerEventHandler89EAD25F
                         - Arn
                     - ':*'
+          - Action: 'lambda:GetFunction'
+            Effect: Allow
+            Resource:
+              'Fn::GetAtt':
+                - ServiceDeployerEventHandler89EAD25F
+                - Arn
         Version: '2012-10-17'
       PolicyName: >-
         ServiceDeployerCustomResourceProviderframeworkonEventServiceRoleDefaultPolicy740A65C9
