@@ -1,21 +1,43 @@
-name: Publish package to NPM
+name: Publish release to NPM
+
 on:
   release:
     types: [published]
+
 jobs:
   build:
+    # prevent from running on forks
+    if: github.repository_owner == 'restatedev'
     runs-on: ubuntu-latest
+
     permissions:
-      contents: read
+      contents: write
       packages: write
+
     steps:
       - uses: actions/checkout@v4
-      # Setup .npmrc file to publish to NPM
       - uses: actions/setup-node@v4
         with:
-          node-version: "20.x"
+          node-version: "22.x"
           registry-url: "https://registry.npmjs.org"
+
       - run: npm ci
+
+      - name: Extract tag version
+        run: echo "TAG_VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+
+      - name: Update package version
+        run: npm version $TAG_VERSION --no-git-tag-version
+
+      - name: Commit and push
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git commit -am "Release ${TAG_VERSION}"
+          git push
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - run: npm run build
       - run: npm run test
       - run: npm publish --tag latest --access public

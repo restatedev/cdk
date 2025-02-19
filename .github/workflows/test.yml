@@ -1,4 +1,4 @@
-name: Build and test
+name: Publish snapshot to NPM
 
 on:
   push:
@@ -9,16 +9,12 @@ jobs:
     # prevent from running on forks
     if: github.repository_owner == 'restatedev'
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        node-version: [20.x]
 
     steps:
       - uses: actions/checkout@v4
-      - name: Use Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node-version }}
+          node-version: "22.x"
           registry-url: "https://registry.npmjs.org"
       - run: npm ci
       - run: npm run build
@@ -37,7 +33,7 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           # We're using 0.0.0 to avoid this version to be higher than released versions.
-          # To use it: 
+          # To use it:
           # "@restatedev/restate-cdk": "^0.0.0-SNAPSHOT"
           npm version 0.0.0-SNAPSHOT-$(date '+%Y%m%d%H%M%S') --git-tag-version false
           # We use dist-tag dev for the snapshot releases, see https://docs.npmjs.com/cli/v9/commands/npm-dist-tag for more info
