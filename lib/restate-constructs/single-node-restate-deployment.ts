@@ -220,7 +220,7 @@ export class SingleNodeRestateDeployment extends Construct implements IRestateEn
     this.tlsEnabled = props.tlsTermination === TlsTermination.ON_HOST_SELF_SIGNED_CERTIFICATE;
 
     const envDefaults = {
-      RESTATE_LOG_FORMAT: "Json",
+      RESTATE_LOG_FORMAT: "json",
       RUST_LOG: "info",
       RESTATE_TRACING_ENDPOINT: "http://localhost:4317",
     };
