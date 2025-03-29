@@ -1,5 +1,9 @@
 name: PR Checks (npm)
 
+permissions:
+  contents: read
+  pull-requests: read
+
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
