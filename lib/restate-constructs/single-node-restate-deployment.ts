@@ -59,7 +59,7 @@ export interface SingleNodeRestateProps {
   /** Prefix for resources created by this construct that require unique names. */
   prefix?: string;
 
-  /** Restate Docker image name. Defaults to `latest`. */
+  /** Restate Docker image name. Defaults to `docker.restate.dev/restatedev/restate`. */
   restateImage?: string;
 
   /** Restate Docker image tag. Defaults to `latest`. */
@@ -231,7 +231,7 @@ export class SingleNodeRestateDeployment extends Construct implements IRestateEn
     const initScript = ec2.UserData.forLinux();
     initScript.addCommands(
       "set -euf -o pipefail",
-      `yum install -y npm && npm install -gq @restatedev/restate@${restateTag}`,
+      `yum install -y npm && npm install -gq @restatedev/restate@${restateTag} @restatedev/restatectl@${restateTag}`,
       "yum install -y docker",
       this.mountDataVolumeScript(),
 
@@ -242,13 +242,13 @@ export class SingleNodeRestateDeployment extends Construct implements IRestateEn
 
       // Start the ADOT collector - needed for X-ray trace forwarding
       `if [ "$(docker ps -qa -f name=adot)" ]; then docker stop adot || true; docker rm adot; fi`,
-      "docker run --name adot --restart on-failure --detach" +
+      "docker run --name adot --restart on-failure --detach --pull always" +
         " -p 4317:4317 -p 55680:55680 -p 8889:8888" +
         ` public.ecr.aws/aws-observability/aws-otel-collector:${adotTag}`,
 
       // Start the Restate server container
       `if [ "$(docker ps -qa -f name=restate)" ]; then docker stop restate || true; docker rm restate; fi`,
-      "docker run --name restate --restart on-failure --detach" +
+      "docker run --name restate --restart on-failure --detach --pull always" +
         " --volume /etc/restate:/etc/restate" +
         " --volume /var/restate:/restate-data" +
         " --network=host" +
@@ -356,44 +356,22 @@ export class SingleNodeRestateDeployment extends Construct implements IRestateEn
         `roles = [`,
         `    "worker",`,
         `    "admin",`,
-        `    "metadata-store",`,
+        `    "metadata-server",`,
+        `    "log-server",`,
         `]`,
         `node-name = "restate-0"`,
         `cluster-name = "${props.restateConfig?.clusterName ?? id}"`,
-        `allow-bootstrap = true`,
-        `bootstrap-num-partitions = ${props.restateConfig?.bootstrapNumPartitions ?? 4}`,
-        `default-thread-pool-size = 3`,
-        `storage-high-priority-bg-threads = 3`,
-        `storage-low-priority-bg-threads = 3`,
+        `default-num-partitions = ${props.restateConfig?.bootstrapNumPartitions ?? 4}`,
         `rocksdb-total-memory-size = "${props.restateConfig?.rocksdb?.totalMemorySize?.toMebibytes() ?? 512.0 + " MB"}"`,
-        `rocksdb-total-memtables-ratio = 0.60`,
-        `rocksdb-bg-threads = 3`,
-        `rocksdb-high-priority-bg-threads = 3`,
-        ``,
-        `[worker]`,
-        `internal-queue-length = 1000`,
-        ``,
-        `[worker.storage]`,
-        `rocksdb-max-background-jobs = 3`,
-        `rocksdb-statistics-level = "except-detailed-timers"`,
-        `num-partitions-to-share-memory-budget = 4`,
         ``,
         `[admin]`,
         `bind-address = "${this.tlsEnabled ? "127.0.0.1" : "0.0.0.0"}:${RESTATE_ADMIN_PORT}"`,
         ``,
         `[admin.query-engine]`,
-        `memory-size = "50.0 MB"`,
-        `query-parallelism = 4`,
+        `memory-size = "256.0 MiB"`,
         ``,
         `[ingress]`,
         `bind-address = "${this.tlsEnabled ? "127.0.0.1" : "0.0.0.0"}:${RESTATE_INGRESS_PORT}"`,
-        `rocksdb-max-background-jobs = 3`,
-        `rocksdb-statistics-level = "except-detailed-timers"`,
-        `writer-batch-commit-count = 1000`,
-        ``,
-        `[metadata-store.rocksdb]`,
-        `rocksdb-max-background-jobs = 1`,
-        `rocksdb-statistics-level = "except-detailed-timers"`,
       ].join("\n")
     );
   }
