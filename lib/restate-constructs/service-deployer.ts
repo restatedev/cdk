@@ -206,7 +206,7 @@ export class ServiceDeployer extends Construct {
 
     const invokerRole = options?.invokerRole ?? environment.invokerRole;
 
-    const deployment = new cdk.CustomResource(handler, "RestateDeployment", {
+    const deployment = new cdk.CustomResource(handler, "RestateServiceDeployment", {
       serviceToken: this.eventHandler.functionArn,
       resourceType: "Custom::RestateServiceDeployment",
       properties: {

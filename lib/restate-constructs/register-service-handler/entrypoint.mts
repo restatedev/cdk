@@ -1,4 +1,6 @@
 // from https://github.com/aws/aws-cdk/blob/main/packages/%40aws-cdk/custom-resource-handlers/lib/core/nodejs-entrypoint-handler/index.ts
+// Copyright 2018-2025 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// SPDX-License-Identifier: Apache-2.0
 
 import * as https from "https";
 import * as url from "url";
