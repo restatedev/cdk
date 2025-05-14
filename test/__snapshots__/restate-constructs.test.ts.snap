@@ -2000,7 +2000,7 @@ exports[`Restate constructs Service Deployer overrides 1`] = `
         - arm64
       Code:
         S3Bucket: cdk-hnb659fds-assets-account-id-region
-        S3Key: 9b2f401811d992475d0f265d5bf5fdfd2f1fbbe762760b5674e60f80274bc089.zip
+        S3Key: 09f53e8dd091a6ca655ec479c900de39472a016e69a589263fe84a752615f286.zip
       Description: Restate custom registration handler
       Environment:
         Variables:
@@ -2012,7 +2012,7 @@ exports[`Restate constructs Service Deployer overrides 1`] = `
           - ServiceDeployerEventHandlerServiceRoleF133584F
           - Arn
       Runtime: nodejs22.x
-      Timeout: 180
+      Timeout: 123
     DependsOn:
       - ServiceDeployerEventHandlerServiceRoleF133584F
   ServiceDeployerDeploymentLogs5B8BE5D2:

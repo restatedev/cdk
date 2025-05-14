@@ -19,7 +19,7 @@ import * as lambda_node from "aws-cdk-lib/aws-lambda-nodejs";
 import * as logs from "aws-cdk-lib/aws-logs";
 import * as secrets from "aws-cdk-lib/aws-secretsmanager";
 import { IRestateEnvironment } from "./restate-environment";
-import { RegistrationProperties } from "./register-service-handler";
+import type { RegistrationProperties } from "./register-service-handler/index.mjs";
 
 const DEFAULT_TIMEOUT = cdk.Duration.seconds(180);
 
@@ -93,46 +93,41 @@ export class ServiceDeployer extends Construct {
      * Allows the custom resource event handler properties to be overridden. The main use case for this is specifying
      * VPC and security group settings for Restate environments that require it.
      */
-    props?: Pick<
-      lambda_node.NodejsFunctionProps,
-      | "allowPublicSubnet"
-      | "architecture"
-      | "runtime"
-      | "bundling"
-      | "depsLockFilePath"
-      | "code"
-      | "entry"
-      | "functionName"
-      | "logGroup"
-      | "securityGroups"
-      | "timeout"
-      | "vpc"
-      | "vpcSubnets"
-    > &
-      Pick<logs.LogGroupProps, "removalPolicy">,
+    props?: Partial<
+      Pick<
+        lambda.FunctionProps,
+        | "allowPublicSubnet"
+        | "architecture"
+        | "runtime"
+        | "code"
+        | "handler"
+        | "functionName"
+        | "logGroup"
+        | "role"
+        | "securityGroups"
+        | "timeout"
+        | "vpc"
+        | "vpcSubnets"
+      > &
+        Pick<logs.LogGroupProps, "removalPolicy">
+    >,
   ) {
     super(scope, id);
 
-    this.eventHandler = new lambda_node.NodejsFunction(this, "EventHandler", {
+    this.eventHandler = new lambda.Function(this, "EventHandler", {
       functionName: props?.functionName,
       logGroup: props?.logGroup,
       description: "Restate custom registration handler",
-      entry: props?.entry ?? path.join(__dirname, "register-service-handler/index.js"),
+      code: props?.code ?? cdk.aws_lambda.Code.fromAsset(path.join(__dirname, "register-service-handler")),
+      handler: props?.handler ?? "index.handler",
       architecture: props?.architecture ?? lambda.Architecture.ARM_64,
       runtime: props?.runtime ?? lambda.Runtime.NODEJS_22_X,
+      role: props?.role,
       memorySize: 128,
       timeout: props?.timeout ?? DEFAULT_TIMEOUT,
       environment: {
         NODE_OPTIONS: "--enable-source-maps",
       },
-      bundling: props?.bundling ?? {
-        minify: false,
-        sourceMap: true,
-        externalModules: ["@aws-sdk/*"],
-        platform: "node",
-        target: "node22",
-      },
-      depsLockFilePath: props?.depsLockFilePath,
       ...(props?.vpc
         ? ({
             vpc: props?.vpc,
