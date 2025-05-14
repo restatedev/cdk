@@ -26,7 +26,9 @@
     "cdk": "cdk"
   },
   "devDependencies": {
-    "@aws-sdk/client-secrets-manager": "^3.808.0",
+    "@aws-sdk/client-secrets-manager": "^3.374.0",
+    "@aws-sdk/node-http-handler": "3.374.0",
+    "@aws-sdk/protocol-http": "^3.374.0",
     "@restatedev/restate-sdk": "^1.4.0",
     "@types/aws-lambda": "^8.10.145",
     "@types/jest": "^29.5.14",

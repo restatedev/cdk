@@ -83,7 +83,7 @@ describe("Restate constructs", () => {
     const handler = mockHandler(stack);
     const serviceDeployer = new ServiceDeployer(stack, "ServiceDeployer", {
       // only needed in testing, where the relative path of the registration function is different from how customers would use it
-      entry: "dist/register-service-handler/index.js",
+      code: lambda.Code.fromAsset("dist/register-service-handler"),
     });
     serviceDeployer.register(handler.currentVersion, cloudEnvironment);
 
@@ -107,7 +107,7 @@ describe("Restate constructs", () => {
     const handler = mockHandler(stack);
     const serviceDeployer = new ServiceDeployer(stack, "ServiceDeployer", {
       // only needed in testing, where the relative path of the registration function is different from how customers would use it
-      entry: "dist/register-service-handler/index.js",
+      code: lambda.Code.fromAsset("dist/register-service-handler"),
     });
     serviceDeployer.register(handler.currentVersion, cloudEnvironment);
 
@@ -125,12 +125,8 @@ describe("Restate constructs", () => {
 
     new ServiceDeployer(stack, "ServiceDeployer", {
       // only needed in testing, where the relative path of the registration function is different from how customers would use it
-      entry: "dist/register-service-handler/index.js",
-      bundling: {
-        minify: true,
-        sourceMap: false,
-        target: "node20",
-      },
+      code: lambda.Code.fromAsset("dist/register-service-handler"),
+      timeout: cdk.Duration.seconds(123),
     });
 
     expect(stack).toMatchCdkSnapshot({
@@ -164,7 +160,7 @@ describe("Restate constructs", () => {
 
     const serviceDeployer = new ServiceDeployer(stack, "ServiceDeployer", {
       // only needed in testing, where the relative path of the registration function is different from how customers would use it
-      entry: "dist/register-service-handler/index.js",
+      code: lambda.Code.fromAsset("dist/register-service-handler"),
     });
     serviceDeployer.register(handler.currentVersion, restateEnvironment);
 
