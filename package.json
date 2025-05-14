@@ -26,6 +26,7 @@
     "cdk": "cdk"
   },
   "devDependencies": {
+    "@aws-sdk/client-secrets-manager": "^3.808.0",
     "@restatedev/restate-sdk": "^1.4.0",
     "@types/aws-lambda": "^8.10.145",
     "@types/jest": "^29.5.14",
@@ -42,7 +43,6 @@
     "zx": "^8.3.2"
   },
   "peerDependencies": {
-    "@aws-sdk/client-secrets-manager": "^3.637.0",
     "aws-cdk": "^2.177.0",
     "aws-cdk-lib": "^2.177.0",
     "constructs": "^10.4.0",
