@@ -72,7 +72,7 @@ const SERVICES_PATH = "services";
  * Custom Resource event handler for Restate service registration. This handler backs the custom resources created by
  * {@link ServiceDeployer} to facilitate Lambda service handler discovery.
  */
-export const handler: Handler<CloudFormationCustomResourceEvent, void> = async function (event) {
+export const handler = async function (event: CloudFormationCustomResourceEvent) {
   console.log({ event });
 
   const props = event.ResourceProperties as RegistrationProperties;
