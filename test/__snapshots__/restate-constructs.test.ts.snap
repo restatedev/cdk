@@ -1161,7 +1161,7 @@ exports[`Restate constructs Deploy a Lambda service handler to Restate Cloud env
     Properties:
       FunctionName:
         Ref: RestateServiceHandler71409CD7
-  RestateServiceHandlerCurrentVersionRestateDeploymentE8F102EB:
+  RestateServiceHandlerCurrentVersionRestateServiceDeployment1DB3C4D6:
     Type: 'Custom::RestateServiceDeployment'
     Properties:
       ServiceToken:
@@ -1358,7 +1358,7 @@ exports[`Restate constructs Deploy a Lambda service handler to existing Restate 
     Properties:
       FunctionName:
         Ref: RestateServiceHandler71409CD7
-  RestateServiceHandlerCurrentVersionRestateDeploymentE8F102EB:
+  RestateServiceHandlerCurrentVersionRestateServiceDeployment1DB3C4D6:
     Type: 'Custom::RestateServiceDeployment'
     Properties:
       ServiceToken:
@@ -1564,7 +1564,7 @@ exports[`Restate constructs Restate Cloud Environment construct with role refere
     Properties:
       FunctionName:
         Ref: RestateServiceHandler71409CD7
-  RestateServiceHandlerCurrentVersionRestateDeploymentE8F102EB:
+  RestateServiceHandlerCurrentVersionRestateServiceDeployment1DB3C4D6:
     Type: 'Custom::RestateServiceDeployment'
     Properties:
       ServiceToken:
@@ -1704,7 +1704,7 @@ exports[`Restate constructs Service Deployer overrides 1`] = `
         - arm64
       Code:
         S3Bucket: cdk-hnb659fds-assets-account-id-region
-        S3Key: d78ff26eaf1df47242c910dac6a2384d940e8f1968c46c44711fb08af6723ffc.zip
+        S3Key: 5da749bceac78ea316fd0986dcb33aa7b518fc597c8688ad6628223820de4022.zip
       Description: Restate custom registration handler
       Environment:
         Variables:
