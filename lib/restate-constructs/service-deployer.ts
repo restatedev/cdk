@@ -12,14 +12,13 @@
 import path from "node:path";
 import { Construct } from "constructs";
 import * as cdk from "aws-cdk-lib";
-import * as cr from "aws-cdk-lib/custom-resources";
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as lambda_node from "aws-cdk-lib/aws-lambda-nodejs";
 import * as logs from "aws-cdk-lib/aws-logs";
 import * as secrets from "aws-cdk-lib/aws-secretsmanager";
 import { IRestateEnvironment } from "./restate-environment";
-import { RegistrationProperties } from "./register-service-handler";
+import type { RegistrationProperties } from "./register-service-handler/index.mts";
 
 const DEFAULT_TIMEOUT = cdk.Duration.seconds(180);
 
@@ -29,6 +28,13 @@ export interface ServiceRegistrationProps {
    * over the environment's token.
    */
   authToken?: secrets.ISecret;
+
+  /**
+   * The external invoker role that Restate can assume to execute service handlers. If left unset, it's assumed that
+   * the Restate deployment has sufficient permissions to invoke the handler directly. Takes precedence over the
+   * environment's invokerRole.
+   */
+  invokerRole?: iam.IRole;
 
   /**
    * Whether to skip granting the invoker role permission to invoke the service handler. The deployer by default
@@ -81,7 +87,6 @@ export interface ServiceRegistrationProps {
  */
 export class ServiceDeployer extends Construct {
   /** The custom resource provider for handling "deployment" resources. */
-  readonly deploymentResourceProvider: cr.Provider;
   readonly eventHandler: lambda_node.NodejsFunction;
 
   private invocationPolicy?: iam.Policy;
@@ -91,48 +96,44 @@ export class ServiceDeployer extends Construct {
     id: string,
     /**
      * Allows the custom resource event handler properties to be overridden. The main use case for this is specifying
-     * VPC and security group settings for Restate environments that require it.
+     * VPC and security group settings for Restate environments that require it. The event handler must be able
+     * to reach the S3 API, so if the subnet has no egress, it will need an S3 VPC endpoint.
      */
-    props?: Pick<
-      lambda_node.NodejsFunctionProps,
-      | "allowPublicSubnet"
-      | "architecture"
-      | "runtime"
-      | "bundling"
-      | "depsLockFilePath"
-      | "code"
-      | "entry"
-      | "functionName"
-      | "logGroup"
-      | "securityGroups"
-      | "timeout"
-      | "vpc"
-      | "vpcSubnets"
-    > &
-      Pick<logs.LogGroupProps, "removalPolicy">,
+    props?: Partial<
+      Pick<
+        lambda.FunctionProps,
+        | "allowPublicSubnet"
+        | "architecture"
+        | "runtime"
+        | "code"
+        | "handler"
+        | "functionName"
+        | "logGroup"
+        | "role"
+        | "securityGroups"
+        | "timeout"
+        | "vpc"
+        | "vpcSubnets"
+      > &
+        Pick<logs.LogGroupProps, "removalPolicy">
+    >,
   ) {
     super(scope, id);
 
-    this.eventHandler = new lambda_node.NodejsFunction(this, "EventHandler", {
+    this.eventHandler = new lambda.Function(this, "EventHandler", {
       functionName: props?.functionName,
       logGroup: props?.logGroup,
       description: "Restate custom registration handler",
-      entry: props?.entry ?? path.join(__dirname, "register-service-handler/index.js"),
+      code: props?.code ?? cdk.aws_lambda.Code.fromAsset(path.join(__dirname, "register-service-handler")),
+      handler: props?.handler ?? "entrypoint.handler",
       architecture: props?.architecture ?? lambda.Architecture.ARM_64,
       runtime: props?.runtime ?? lambda.Runtime.NODEJS_22_X,
+      role: props?.role,
       memorySize: 128,
       timeout: props?.timeout ?? DEFAULT_TIMEOUT,
       environment: {
         NODE_OPTIONS: "--enable-source-maps",
       },
-      bundling: props?.bundling ?? {
-        minify: false,
-        sourceMap: true,
-        externalModules: ["@aws-sdk/*"],
-        platform: "node",
-        target: "node22",
-      },
-      depsLockFilePath: props?.depsLockFilePath,
       ...(props?.vpc
         ? ({
             vpc: props?.vpc,
@@ -151,10 +152,6 @@ export class ServiceDeployer extends Construct {
         removalPolicy: props?.removalPolicy ?? cdk.RemovalPolicy.RETAIN_ON_UPDATE_OR_DELETE,
       });
     }
-
-    this.deploymentResourceProvider = new cr.Provider(this, "CustomResourceProvider", {
-      onEventHandler: this.eventHandler,
-    });
   }
 
   /**
@@ -205,17 +202,19 @@ export class ServiceDeployer extends Construct {
     options?: ServiceRegistrationProps,
   ) {
     const authToken = options?.authToken ?? environment.authToken;
-    authToken?.grantRead(this.deploymentResourceProvider.onEventHandler);
+    authToken?.grantRead(this.eventHandler);
 
-    const deployment = new cdk.CustomResource(handler, "RestateDeployment", {
-      serviceToken: this.deploymentResourceProvider.serviceToken,
+    const invokerRole = options?.invokerRole ?? environment.invokerRole;
+
+    const deployment = new cdk.CustomResource(handler, "RestateServiceDeployment", {
+      serviceToken: this.eventHandler.functionArn,
       resourceType: "Custom::RestateServiceDeployment",
       properties: {
         servicePath: serviceName,
         adminUrl: options?.adminUrl ?? environment.adminUrl,
         authTokenSecretArn: authToken?.secretArn,
         serviceLambdaArn: handler.functionArn,
-        invokeRoleArn: environment.invokerRole?.roleArn,
+        invokeRoleArn: invokerRole?.roleArn,
         // removalPolicy: "retain",
         private: (options?.private ?? false).toString() as "true" | "false",
         configurationVersion:
@@ -226,7 +225,7 @@ export class ServiceDeployer extends Construct {
       } satisfies RegistrationProperties,
     });
 
-    if (environment.invokerRole && !options?.skipInvokeFunctionGrant) {
+    if (invokerRole && !options?.skipInvokeFunctionGrant) {
       // We create a separate policy which we'll attach to the provided invoker role. This breaks a circular cross-stack
       // dependency that would otherwise be created between the service deployer and the invoker role.
       if (!this.invocationPolicy) {
@@ -236,7 +235,7 @@ export class ServiceDeployer extends Construct {
         // defined in the same stack as the service deployer, which seems to help. Some propagation delay might still mean
         // we lean on retries in the deployer event handler in any event but this reduces the probability of failure.
         deployment.node.addDependency(this.invocationPolicy);
-        this.invocationPolicy.attachToRole(environment.invokerRole);
+        this.invocationPolicy.attachToRole(invokerRole);
       }
       this.invocationPolicy.addStatements(
         new iam.PolicyStatement({

@@ -11,7 +11,6 @@
 
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as secrets from "aws-cdk-lib/aws-secretsmanager";
-import { FunctionOptions } from "aws-cdk-lib/aws-lambda";
 import { SingleNodeRestateDeployment } from "./single-node-restate-deployment";
 import { RestateCloudEnvironment } from "./restate-cloud-environment";
 
@@ -19,7 +18,7 @@ import { RestateCloudEnvironment } from "./restate-cloud-environment";
  * A Restate environment is a unique deployment of the Restate service. Implementations of this interface may refer to
  * cloud or self-managed environments.
  */
-export interface IRestateEnvironment extends Pick<FunctionOptions, "vpc" | "vpcSubnets" | "securityGroups"> {
+export interface IRestateEnvironment {
   /**
    * The external invoker role that Restate can assume to execute service handlers. If left unset, it's assumed that
    * the Restate deployment has sufficient permissions to invoke the service handlers directly. Setting this role allows
