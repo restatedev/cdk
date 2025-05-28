@@ -33,7 +33,7 @@ npm i @restatedev/restate-cdk
 - [`ServiceDeployer`](./lib/restate-constructs/service-deployer.ts) - facilitates registration of Lambda-based service
   handlers with a Restate environment, such as a self-hosted EC2 environment
 
-For a more detailed look, please refer to the [Restate CDK documentation](https://docs.restate.dev/deploy/lambda/cdk).
+For a more detailed look, please refer to the [Restate CDK documentation](https://docs.restate.dev/deploy/services/faas/lambda/cdk).
 
 ### Examples
 
