@@ -11,9 +11,7 @@
 
 import * as cdk from "aws-cdk-lib";
 import * as lambda from "aws-cdk-lib/aws-lambda";
-import * as logs from "aws-cdk-lib/aws-logs";
 import * as secrets from "aws-cdk-lib/aws-secretsmanager";
-import "source-map-support/register";
 
 import { EnvironmentId, RestateCloudEnvironment, ServiceDeployer } from "../../lib/restate-constructs";
 
@@ -46,7 +44,6 @@ const environment = new RestateCloudEnvironment(stack, "CloudEnv", {
 
 const deployer = new ServiceDeployer(stack, "ServiceDeployer", {
   removalPolicy: cdk.RemovalPolicy.DESTROY,
-  entry: "../../dist/register-service-handler/index.js", // only needed for in-tree tests
 });
 
 deployer.deployService("Greeter", handler.currentVersion, environment);

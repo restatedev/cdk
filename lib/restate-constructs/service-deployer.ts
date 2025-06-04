@@ -131,9 +131,6 @@ export class ServiceDeployer extends Construct {
       role: props?.role,
       memorySize: 128,
       timeout: props?.timeout ?? DEFAULT_TIMEOUT,
-      environment: {
-        NODE_OPTIONS: "--enable-source-maps",
-      },
       ...(props?.vpc
         ? ({
             vpc: props?.vpc,
