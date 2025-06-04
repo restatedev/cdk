@@ -1230,9 +1230,6 @@ exports[`Restate constructs Deploy a Lambda service handler to Restate Cloud env
         - arm64
       Code: Any<Object>
       Description: Restate custom registration handler
-      Environment:
-        Variables:
-          NODE_OPTIONS: '--enable-source-maps'
       Handler: entrypoint.handler
       MemorySize: 128
       Role:
@@ -1419,9 +1416,6 @@ exports[`Restate constructs Deploy a Lambda service handler to existing Restate 
         - arm64
       Code: Any<Object>
       Description: Restate custom registration handler
-      Environment:
-        Variables:
-          NODE_OPTIONS: '--enable-source-maps'
       Handler: entrypoint.handler
       MemorySize: 128
       Role:
@@ -1630,9 +1624,6 @@ exports[`Restate constructs Restate Cloud Environment construct with role refere
         - arm64
       Code: Any<Object>
       Description: Restate custom registration handler
-      Environment:
-        Variables:
-          NODE_OPTIONS: '--enable-source-maps'
       Handler: entrypoint.handler
       MemorySize: 128
       Role:
@@ -1704,11 +1695,8 @@ exports[`Restate constructs Service Deployer overrides 1`] = `
         - arm64
       Code:
         S3Bucket: cdk-hnb659fds-assets-account-id-region
-        S3Key: 5da749bceac78ea316fd0986dcb33aa7b518fc597c8688ad6628223820de4022.zip
+        S3Key: 9c217436df25f6a159d4d2733ad212594c57fd8ca1e88e8041e7682ced3ba6df.zip
       Description: Restate custom registration handler
-      Environment:
-        Variables:
-          NODE_OPTIONS: '--enable-source-maps'
       Handler: entrypoint.handler
       MemorySize: 128
       Role:
