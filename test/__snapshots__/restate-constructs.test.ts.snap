@@ -1161,6 +1161,8 @@ exports[`Restate constructs Deploy a Lambda service handler to Restate Cloud env
     Properties:
       FunctionName:
         Ref: RestateServiceHandler71409CD7
+    Metadata:
+      'aws:cdk:do-not-refactor': true
   RestateServiceHandlerCurrentVersionRestateServiceDeployment1DB3C4D6:
     Type: 'Custom::RestateServiceDeployment'
     Properties:
@@ -1355,6 +1357,8 @@ exports[`Restate constructs Deploy a Lambda service handler to existing Restate 
     Properties:
       FunctionName:
         Ref: RestateServiceHandler71409CD7
+    Metadata:
+      'aws:cdk:do-not-refactor': true
   RestateServiceHandlerCurrentVersionRestateServiceDeployment1DB3C4D6:
     Type: 'Custom::RestateServiceDeployment'
     Properties:
@@ -1558,6 +1562,8 @@ exports[`Restate constructs Restate Cloud Environment construct with role refere
     Properties:
       FunctionName:
         Ref: RestateServiceHandler71409CD7
+    Metadata:
+      'aws:cdk:do-not-refactor': true
   RestateServiceHandlerCurrentVersionRestateServiceDeployment1DB3C4D6:
     Type: 'Custom::RestateServiceDeployment'
     Properties:
