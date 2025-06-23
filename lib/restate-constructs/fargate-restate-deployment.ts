@@ -27,7 +27,7 @@ const PUBLIC_INGRESS_PORT = 443;
 const PUBLIC_ADMIN_PORT = 9070;
 const RESTATE_INGRESS_PORT = 8080;
 const RESTATE_ADMIN_PORT = 9070;
-const RESTATE_IMAGE_DEFAULT = "docker.io/restatedev/restate";
+const RESTATE_IMAGE_DEFAULT = "docker.restate.dev/restatedev/restate";
 const RESTATE_DOCKER_DEFAULT_TAG = "1.4";
 const ADOT_DOCKER_DEFAULT_TAG = "latest";
 

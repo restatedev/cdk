@@ -742,7 +742,7 @@ exports[`Restate constructs Create a self-hosted Restate environment deployed on
                         RESTATE_TRACING_ENDPOINT="http://localhost:4317"
                         --log-driver=awslogs --log-opt awslogs-group=
                       - Ref: RestateLogsFD86ECAE
-                      - ' docker.io/restatedev/restate:1.4 --config-file /etc/restate/config.toml'
+                      - ' docker.restate.dev/restatedev/restate:1.4 --config-file /etc/restate/config.toml'
               - |
 
                 --+AWS+CDK+User+Data+Separator==--
@@ -1040,7 +1040,7 @@ exports[`Restate constructs Create a self-hosted Restate environment deployed on
                         RESTATE_INGRESS__ADVERTISED_INGRESS_ENDPOINT="http://restate-ingress"
                         --log-driver=awslogs --log-opt awslogs-group=
                       - Ref: RestateLogsFD86ECAE
-                      - ' docker.io/restatedev/restate:custom-version --config-file /etc/restate/config.toml'
+                      - ' docker.restate.dev/restatedev/restate:custom-version --config-file /etc/restate/config.toml'
               - |
 
                 --+AWS+CDK+User+Data+Separator==--
