@@ -12,8 +12,9 @@
 import * as cdk from "aws-cdk-lib";
 import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as secrets from "aws-cdk-lib/aws-secretsmanager";
+import path from "path";
 
-import { EnvironmentId, RestateCloudEnvironment, ServiceDeployer } from "../../lib/restate-constructs";
+import { EnvironmentId, RestateCloudEnvironment, ServiceDeployer } from "../../../lib/restate-constructs";
 
 // Deploy with: RESTATE_ENV_ID=env_... RESTATE_API_KEY=key_... npx cdk --app 'npx tsx restate-cloud.e2e.ts' deploy
 const app = new cdk.App();
@@ -43,6 +44,7 @@ const environment = new RestateCloudEnvironment(stack, "CloudEnv", {
 });
 
 const deployer = new ServiceDeployer(stack, "ServiceDeployer", {
+  code: lambda.Code.fromAsset(path.join(__dirname, "../../../dist/register-service-handler")),
   removalPolicy: cdk.RemovalPolicy.DESTROY,
 });
 

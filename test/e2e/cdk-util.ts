@@ -23,14 +23,14 @@ interface StackOutput {
 }
 
 export async function createStack(config: CdkStackProps): Promise<Record<string, string>> {
-  const retainStack = new Boolean(process.env["RETAIN_STACK"]).valueOf();
+  const noRollback = new Boolean(process.env["NO_ROLLBACK"]).valueOf();
 
   cd(path.resolve(__dirname));
   await $`npx cdk --app 'npx tsx ${config.cdkAppPath}' deploy \
           --context stack_name="${config.stackName}" \
           --output "cdk.${config.stackName}.out" \
           --require-approval never \
-          ${retainStack ? "--no-rollback" : ""}`.timeout("575s");
+          ${noRollback ? "--no-rollback" : ""}`.timeout("575s");
 
   const result =
     await $`aws cloudformation describe-stacks --stack-name "${config.stackName}" --query 'Stacks[0].Outputs'`;

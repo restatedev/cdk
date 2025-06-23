@@ -17,7 +17,7 @@ describe("Single Node EC2 E2E Test", () => {
   // Make zx print all output
   $.verbose = true;
 
-  let cdkAppPath = "ec2-simple-stack.ts";
+  let cdkAppPath = "stacks/ec2-simple-stack.ts";
   let stackName = "e2e-RestateSingleNode";
   let ingressUrl: string;
 

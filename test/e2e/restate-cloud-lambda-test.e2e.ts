@@ -17,7 +17,7 @@ describe("Restate Cloud + AWS Lambda E2E Test", () => {
   // Make zx print all output
   $.verbose = true;
 
-  let cdkAppPath = "restate-cloud-lambda-stack.ts";
+  let cdkAppPath = "stacks/restate-cloud-lambda-stack.ts";
   let stackName = "e2e-RestateCloudLambda";
   let ingressUrl: string;
 
