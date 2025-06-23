@@ -213,8 +213,30 @@ export class SingleNodeRestateDeployment extends Construct implements IRestateEn
       });
     logGroup.grantWrite(this.instanceRole);
 
-    const restateImage = props.restateImage ?? RESTATE_IMAGE_DEFAULT;
-    const restateTag = props.restateTag ?? RESTATE_DOCKER_DEFAULT_TAG;
+    // Parse the provided or default image reference
+    let restateImage = props.restateImage ?? RESTATE_IMAGE_DEFAULT;
+    let restateTag = props.restateTag ?? RESTATE_DOCKER_DEFAULT_TAG;
+    let useShaDigest = false;
+    let shaDigest = "";
+
+    if (restateImage.includes("@")) {
+      const parts = restateImage.split("@");
+      restateImage = parts[0];
+      shaDigest = parts[1];
+      useShaDigest = true;
+    } else if (restateImage.includes(":")) {
+      const parts = restateImage.split(":");
+      restateImage = parts[0];
+      const inlineTag = parts[1];
+
+      if (props.restateTag && props.restateTag !== inlineTag) {
+        throw new Error(
+          `Tag conflict: inline tag '${inlineTag}' in image doesn't match explicit tag '${props.restateTag}' property`,
+        );
+      }
+
+      restateTag = inlineTag;
+    }
     const adotTag = props.adotTag ?? ADOT_DOCKER_DEFAULT_TAG;
 
     this.tlsEnabled = props.tlsTermination === TlsTermination.ON_HOST_SELF_SIGNED_CERTIFICATE;
@@ -254,7 +276,7 @@ export class SingleNodeRestateDeployment extends Construct implements IRestateEn
         " --network=host" +
         ` ${envArgs}` +
         ` --log-driver=awslogs --log-opt awslogs-group=${logGroup.logGroupName}` +
-        ` ${restateImage}:${restateTag}` +
+        ` ${useShaDigest ? `${restateImage}@${shaDigest}` : `${restateImage}:${restateTag}`}` +
         " --config-file /etc/restate/config.toml",
     );
 
