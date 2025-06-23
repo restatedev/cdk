@@ -65,6 +65,9 @@ export interface SingleNodeRestateProps {
   /** Restate Docker image tag. Defaults to `latest`. */
   restateTag?: string;
 
+  /** Restate NPM tools tag (used for `restate`/`restatectl`). Defaults to `latest`. */
+  restateNpmTag?: string;
+
   /**
    * EBS data volume settings for Restate data storage. If not specified, a default 8GB volume will be created.
    */
@@ -143,7 +146,8 @@ const RESTATE_TLS_INGRESS_PORT = 443;
 const RESTATE_ADMIN_PORT = 9070;
 const RESTATE_TLS_ADMIN_PORT = 9073;
 const RESTATE_IMAGE_DEFAULT = "docker.io/restatedev/restate";
-const RESTATE_DOCKER_DEFAULT_TAG = "latest";
+const RESTATE_DOCKER_DEFAULT_TAG = "1.4";
+const RESTATE_NPM_DEFAULT_TAG = "1.4";
 const ADOT_DOCKER_DEFAULT_TAG = "latest";
 const DATA_DEVICE_NAME = "/dev/sdd";
 
@@ -213,9 +217,9 @@ export class SingleNodeRestateDeployment extends Construct implements IRestateEn
       });
     logGroup.grantWrite(this.instanceRole);
 
-    // Parse the provided or default image reference
     let restateImage = props.restateImage ?? RESTATE_IMAGE_DEFAULT;
-    let restateTag = props.restateTag ?? RESTATE_DOCKER_DEFAULT_TAG;
+    let restateDockerTag = props.restateTag ?? RESTATE_DOCKER_DEFAULT_TAG;
+    let restateNpmTag = props.restateNpmTag ?? RESTATE_NPM_DEFAULT_TAG;
     let useShaDigest = false;
     let shaDigest = "";
 
@@ -235,7 +239,7 @@ export class SingleNodeRestateDeployment extends Construct implements IRestateEn
         );
       }
 
-      restateTag = inlineTag;
+      restateDockerTag = inlineTag;
     }
     const adotTag = props.adotTag ?? ADOT_DOCKER_DEFAULT_TAG;
 
@@ -253,7 +257,7 @@ export class SingleNodeRestateDeployment extends Construct implements IRestateEn
     const initScript = ec2.UserData.forLinux();
     initScript.addCommands(
       "set -euf -o pipefail",
-      `yum install -y npm && npm install -gq @restatedev/restate@${restateTag} @restatedev/restatectl@${restateTag}`,
+      `yum install -y npm && npm install -gq @restatedev/restate@${restateNpmTag} @restatedev/restatectl@${restateNpmTag}`,
       "yum install -y docker",
       this.mountDataVolumeScript(),
 
@@ -276,7 +280,7 @@ export class SingleNodeRestateDeployment extends Construct implements IRestateEn
         " --network=host" +
         ` ${envArgs}` +
         ` --log-driver=awslogs --log-opt awslogs-group=${logGroup.logGroupName}` +
-        ` ${useShaDigest ? `${restateImage}@${shaDigest}` : `${restateImage}:${restateTag}`}` +
+        ` ${useShaDigest ? `${restateImage}@${shaDigest}` : `${restateImage}:${restateDockerTag}`}` +
         " --config-file /etc/restate/config.toml",
     );
 
@@ -380,6 +384,7 @@ export class SingleNodeRestateDeployment extends Construct implements IRestateEn
         `    "admin",`,
         `    "metadata-server",`,
         `    "log-server",`,
+        `    "http-ingress",`,
         `]`,
         `node-name = "restate-0"`,
         `cluster-name = "${props.restateConfig?.clusterName ?? id}"`,

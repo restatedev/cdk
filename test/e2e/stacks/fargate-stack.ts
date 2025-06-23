@@ -12,10 +12,10 @@
 import * as cdk from "aws-cdk-lib";
 import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as r53 from "aws-cdk-lib/aws-route53";
-import "source-map-support/register";
+import path from "path";
 
-import { ServiceDeployer } from "../../lib/restate-constructs";
-import { FargateRestateDeployment } from "../../lib/restate-constructs/fargate-restate-deployment";
+import { ServiceDeployer } from "../../../lib/restate-constructs";
+import { FargateRestateDeployment } from "../../../lib/restate-constructs/fargate-restate-deployment";
 
 // Deploy with: npx cdk --app 'npx tsx fargate.e2e.ts' --output cdk.fargate.out --context domainName=dev.restate.cloud --context name=fargate-e2e-test deploy
 const app = new cdk.App();
@@ -43,7 +43,7 @@ const environment = new FargateRestateDeployment(stack, "Restate", {
 
 const deployer = new ServiceDeployer(stack, "ServiceDeployer", {
   removalPolicy: cdk.RemovalPolicy.DESTROY,
-  entry: "../../dist/register-service-handler/index.js", // only needed for in-tree tests
+  code: lambda.Code.fromAsset(path.join(__dirname, "../../../dist/register-service-handler")),
 });
 
 deployer.deployService("Greeter", handler.currentVersion, environment);

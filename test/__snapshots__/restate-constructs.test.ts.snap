@@ -657,7 +657,7 @@ exports[`Restate constructs Create a self-hosted Restate environment deployed on
                         set -euf -o pipefail
 
                         yum install -y npm && npm install -gq
-                        @restatedev/restate@latest @restatedev/restatectl@latest
+                        @restatedev/restate@1.4 @restatedev/restatectl@1.4
 
                         yum install -y docker
 
@@ -695,6 +695,7 @@ exports[`Restate constructs Create a self-hosted Restate environment deployed on
                             "admin",
                             "metadata-server",
                             "log-server",
+                            "http-ingress",
                         ]
 
                         node-name = "restate-0"
@@ -741,7 +742,7 @@ exports[`Restate constructs Create a self-hosted Restate environment deployed on
                         RESTATE_TRACING_ENDPOINT="http://localhost:4317"
                         --log-driver=awslogs --log-opt awslogs-group=
                       - Ref: RestateLogsFD86ECAE
-                      - ' docker.io/restatedev/restate:latest --config-file /etc/restate/config.toml'
+                      - ' docker.io/restatedev/restate:1.4 --config-file /etc/restate/config.toml'
               - |
 
                 --+AWS+CDK+User+Data+Separator==--
@@ -953,8 +954,7 @@ exports[`Restate constructs Create a self-hosted Restate environment deployed on
                         set -euf -o pipefail
 
                         yum install -y npm && npm install -gq
-                        @restatedev/restate@custom-version
-                        @restatedev/restatectl@custom-version
+                        @restatedev/restate@1.4 @restatedev/restatectl@1.4
 
                         yum install -y docker
 
@@ -992,6 +992,7 @@ exports[`Restate constructs Create a self-hosted Restate environment deployed on
                             "admin",
                             "metadata-server",
                             "log-server",
+                            "http-ingress",
                         ]
 
                         node-name = "restate-0"

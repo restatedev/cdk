@@ -10,17 +10,17 @@
  */
 
 import * as cdk from "aws-cdk-lib";
-import * as lambda from "aws-cdk-lib/aws-lambda";
-import * as logs from "aws-cdk-lib/aws-logs";
+import * as acm from "aws-cdk-lib/aws-certificatemanager";
 import * as ec2 from "aws-cdk-lib/aws-ec2";
 import * as elb2 from "aws-cdk-lib/aws-elasticloadbalancingv2";
 import * as elb2_targets from "aws-cdk-lib/aws-elasticloadbalancingv2-targets";
-import * as acm from "aws-cdk-lib/aws-certificatemanager";
+import * as lambda from "aws-cdk-lib/aws-lambda";
+import * as logs from "aws-cdk-lib/aws-logs";
 import * as r53 from "aws-cdk-lib/aws-route53";
 import * as r53_targets from "aws-cdk-lib/aws-route53-targets";
-import "source-map-support/register";
+import path from "path";
 
-import { ServiceDeployer, SingleNodeRestateDeployment } from "../../lib/restate-constructs";
+import { ServiceDeployer, SingleNodeRestateDeployment } from "../../../lib/restate-constructs";
 
 // Deploy with: npx cdk --app 'npx tsx single-node-ec2-alb.e2e.ts' deploy --context vpc_id=... --context domainName=... --context hostname=...
 const app = new cdk.App();
@@ -52,7 +52,7 @@ const environment = new SingleNodeRestateDeployment(stack, "Restate", {
 });
 
 const deployer = new ServiceDeployer(stack, "ServiceDeployer", {
-  entry: "../../dist/register-service-handler/index.js", // only needed for in-tree tests
+  code: lambda.Code.fromAsset(path.join(__dirname, "../../../dist/register-service-handler")),
   removalPolicy: cdk.RemovalPolicy.DESTROY,
   // An alternative to deploying via the LB is to put the deployer itself in the VPC:
   // vpc: environment.vpc,
