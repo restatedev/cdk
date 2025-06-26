@@ -61,7 +61,7 @@ type RegisterDeploymentResponse = {
   services: { name: string; revision: number; public: boolean }[];
 };
 
-const MAX_HEALTH_CHECK_ATTEMPTS = 5; // This is intentionally quite long to allow some time for first-run EC2 and Docker boot up
+const MAX_HEALTH_CHECK_ATTEMPTS = 10; // This is intentionally quite long to allow some time for first-run EC2 and Docker boot up
 const MAX_REGISTRATION_ATTEMPTS = 3;
 
 const DEPLOYMENTS_PATH = "deployments";
