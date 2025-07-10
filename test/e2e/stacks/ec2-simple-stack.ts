@@ -20,12 +20,7 @@ import { ServiceDeployer, SingleNodeRestateDeployment } from "../../../lib/resta
 // Deploy with: npx cdk --app 'npx tsx ec2-simple-stack.ts' deploy --context vpc_id=...
 const app = new cdk.App();
 const stackName = app.node.tryGetContext("stack_name") ?? "e2e-RestateSingleNode";
-const stack = new cdk.Stack(app, stackName, {
-  env: {
-    account: process.env.CDK_DEFAULT_ACCOUNT,
-    region: process.env.CDK_DEFAULT_REGION,
-  },
-});
+const stack = new cdk.Stack(app, stackName);
 
 const handler: lambda.Function = new lambda.Function(stack, "Service", {
   runtime: lambda.Runtime.NODEJS_22_X,
@@ -33,8 +28,7 @@ const handler: lambda.Function = new lambda.Function(stack, "Service", {
   handler: "bundle.handler",
 });
 
-const vpcId = app.node.tryGetContext("vpc_id");
-const vpc = ec2.Vpc.fromLookup(stack, "Vpc", vpcId ? { vpcId } : { isDefault: true });
+const vpc = new ec2.Vpc(stack, "Vpc", { maxAzs: 1 });
 
 const environment = new SingleNodeRestateDeployment(stack, "Restate", {
   restateImage: "ghcr.io/restatedev/restate:main",
@@ -54,14 +48,12 @@ environment.instance.connections.allowFrom(ec2.Peer.anyIpv4(), ec2.Port.tcp(22))
 
 const deployer = new ServiceDeployer(stack, "ServiceDeployer", {
   vpc: environment.vpc,
-  allowPublicSubnet: true, // necessary to deploy to a public VPC subnet - no internet access but we don't need it
   securityGroups: [environment.adminSecurityGroup], // the admin SG can access the admin port 9070
   removalPolicy: cdk.RemovalPolicy.DESTROY,
   code: lambda.Code.fromAsset(path.join(__dirname, "../../../dist/register-service-handler")),
 });
 
 deployer.register(handler.latestVersion, environment, {
-  private: false,
   // insecure: true, // accept self-signed cert
 });
 
