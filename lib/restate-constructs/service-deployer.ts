@@ -20,7 +20,7 @@ import * as secrets from "aws-cdk-lib/aws-secretsmanager";
 import { IRestateEnvironment } from "./restate-environment";
 import type { RegistrationProperties } from "./register-service-handler/index.mts";
 
-const DEFAULT_TIMEOUT = cdk.Duration.seconds(180);
+const DEFAULT_TIMEOUT = cdk.Duration.seconds(300);
 
 export interface ServiceRegistrationProps {
   /**

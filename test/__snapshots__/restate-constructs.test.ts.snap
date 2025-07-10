@@ -656,6 +656,8 @@ exports[`Restate constructs Create a self-hosted Restate environment deployed on
 
                         set -euf -o pipefail
 
+                        yum install -y aws-cfn-bootstrap
+
                         yum install -y npm && npm install -gq
                         @restatedev/restate@1.4 @restatedev/restatectl@1.4
 
@@ -742,13 +744,104 @@ exports[`Restate constructs Create a self-hosted Restate environment deployed on
                         RESTATE_TRACING_ENDPOINT="http://localhost:4317"
                         --log-driver=awslogs --log-opt awslogs-group=
                       - Ref: RestateLogsFD86ECAE
-                      - ' docker.restate.dev/restatedev/restate:1.4 --config-file /etc/restate/config.toml'
+                      - >2-
+                         docker.restate.dev/restatedev/restate:1.4 --config-file /etc/restate/config.toml
+                        yum install -y nginx
+
+                        mkdir -p /etc/pki/private
+
+                        openssl req -new -x509 -nodes -sha256 -days 365
+                        -extensions v3_ca -subj
+                        '/C=DE/ST=Berlin/L=Berlin/O=restate.dev/OU=demo/CN=restate.example.com'
+                        -newkey rsa:2048 -keyout
+                        /etc/pki/private/restate-selfsigned.key -out
+                        /etc/pki/private/restate-selfsigned.crt
+
+                        cat << EOF > /etc/nginx/conf.d/restate-ingress.conf
+
+                        server {
+                          listen 443 ssl http2;
+                          listen [::]:443 ssl http2;
+                          server_name _;
+                          root /usr/share/nginx/html;
+
+                          ssl_certificate "/etc/pki/private/restate-selfsigned.crt";
+                          ssl_certificate_key "/etc/pki/private/restate-selfsigned.key";
+                          ssl_session_cache shared:SSL:1m;
+                          ssl_session_timeout 10m;
+                          ssl_ciphers PROFILE=SYSTEM;
+                          ssl_prefer_server_ciphers on;
+
+                          location / {
+                            proxy_pass http://localhost:8080;
+                            proxy_read_timeout 3600;
+                          }
+                        }
+
+
+                        server {
+                          listen 9073 ssl http2;
+                          listen [::]:9073 ssl http2;
+                          server_name _;
+                          root /usr/share/nginx/html;
+
+                          ssl_certificate "/etc/pki/private/restate-selfsigned.crt";
+                          ssl_certificate_key "/etc/pki/private/restate-selfsigned.key";
+                          ssl_session_cache shared:SSL:1m;
+                          ssl_session_timeout 10m;
+                          ssl_ciphers PROFILE=SYSTEM;
+                          ssl_prefer_server_ciphers on;
+
+                          location / {
+                            proxy_pass http://localhost:9070;
+                          }
+                        }
+
+                        EOF
+
+                        systemctl start nginx
+
+                        echo 'Waiting for Restate server admin API to become
+                        available...'
+
+                        HEALTH_CHECK_URL='http://localhost:9070/health'
+
+                        MAX_ATTEMPTS=60
+
+                        ATTEMPT=0
+
+
+                        while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+                          if curl -f -s $HEALTH_CHECK_URL > /dev/null 2>&1; then
+                            echo 'Health check passed - Restate server is healthy'
+                            break
+                          fi
+                          ATTEMPT=$((ATTEMPT + 1))
+                          echo "Health check attempt $ATTEMPT/$MAX_ATTEMPTS failed, retrying in 5 seconds..."
+                          sleep 5
+                        done
+
+
+                        if [ $ATTEMPT -eq $MAX_ATTEMPTS ]; then
+                          echo "Health check failed after $MAX_ATTEMPTS attempts"
+                          /opt/aws/bin/cfn-signal -e 1 --stack RestateSelfHostedServerEc2Stack --resource RestateHost1AC4F9D1 --region region
+                          exit 1
+                        fi
+
+
+                        /opt/aws/bin/cfn-signal -e 0 --stack
+                        RestateSelfHostedServerEc2Stack --resource
+                        RestateHost1AC4F9D1 --region region
               - |
 
                 --+AWS+CDK+User+Data+Separator==--
     DependsOn:
       - RestateInstanceRoleDefaultPolicyD1D39538
       - RestateInstanceRoleACC59A6F
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT10M
+        Count: 1
   RestateIngressSecurityGroupAF84F229:
     Type: 'AWS::EC2::SecurityGroup'
     Properties:
@@ -953,6 +1046,8 @@ exports[`Restate constructs Create a self-hosted Restate environment deployed on
 
                         set -euf -o pipefail
 
+                        yum install -y aws-cfn-bootstrap
+
                         yum install -y npm && npm install -gq
                         @restatedev/restate@1.4 @restatedev/restatectl@1.4
 
@@ -1040,13 +1135,49 @@ exports[`Restate constructs Create a self-hosted Restate environment deployed on
                         RESTATE_INGRESS__ADVERTISED_INGRESS_ENDPOINT="http://restate-ingress"
                         --log-driver=awslogs --log-opt awslogs-group=
                       - Ref: RestateLogsFD86ECAE
-                      - ' docker.restate.dev/restatedev/restate:custom-version --config-file /etc/restate/config.toml'
+                      - >2-
+                         docker.restate.dev/restatedev/restate:custom-version --config-file /etc/restate/config.toml
+                        echo 'Waiting for Restate server admin API to become
+                        available...'
+
+                        HEALTH_CHECK_URL='http://localhost:9070/health'
+
+                        MAX_ATTEMPTS=60
+
+                        ATTEMPT=0
+
+
+                        while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+                          if curl -f -s $HEALTH_CHECK_URL > /dev/null 2>&1; then
+                            echo 'Health check passed - Restate server is healthy'
+                            break
+                          fi
+                          ATTEMPT=$((ATTEMPT + 1))
+                          echo "Health check attempt $ATTEMPT/$MAX_ATTEMPTS failed, retrying in 5 seconds..."
+                          sleep 5
+                        done
+
+
+                        if [ $ATTEMPT -eq $MAX_ATTEMPTS ]; then
+                          echo "Health check failed after $MAX_ATTEMPTS attempts"
+                          /opt/aws/bin/cfn-signal -e 1 --stack RestateSelfHostedServerEc2Stack --resource RestateHost1AC4F9D1 --region region
+                          exit 1
+                        fi
+
+
+                        /opt/aws/bin/cfn-signal -e 0 --stack
+                        RestateSelfHostedServerEc2Stack --resource
+                        RestateHost1AC4F9D1 --region region
               - |
 
                 --+AWS+CDK+User+Data+Separator==--
     DependsOn:
       - RestateInstanceRoleDefaultPolicyD1D39538
       - RestateInstanceRoleACC59A6F
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT10M
+        Count: 1
   RestateIngressSecurityGroupAF84F229:
     Type: 'AWS::EC2::SecurityGroup'
     Properties:
@@ -1240,7 +1371,7 @@ exports[`Restate constructs Deploy a Lambda service handler to Restate Cloud env
           - ServiceDeployerEventHandlerServiceRoleF133584F
           - Arn
       Runtime: nodejs22.x
-      Timeout: 180
+      Timeout: 300
     DependsOn:
       - ServiceDeployerEventHandlerServiceRoleDefaultPolicyFE2DC3C9
       - ServiceDeployerEventHandlerServiceRoleF133584F
@@ -1428,7 +1559,7 @@ exports[`Restate constructs Deploy a Lambda service handler to existing Restate 
           - ServiceDeployerEventHandlerServiceRoleF133584F
           - Arn
       Runtime: nodejs22.x
-      Timeout: 180
+      Timeout: 300
     DependsOn:
       - ServiceDeployerEventHandlerServiceRoleDefaultPolicyFE2DC3C9
       - ServiceDeployerEventHandlerServiceRoleF133584F
@@ -1638,7 +1769,7 @@ exports[`Restate constructs Restate Cloud Environment construct with role refere
           - ServiceDeployerEventHandlerServiceRoleF133584F
           - Arn
       Runtime: nodejs22.x
-      Timeout: 180
+      Timeout: 300
     DependsOn:
       - ServiceDeployerEventHandlerServiceRoleDefaultPolicyFE2DC3C9
       - ServiceDeployerEventHandlerServiceRoleF133584F

@@ -257,6 +257,8 @@ export class SingleNodeRestateDeployment extends Construct implements IRestateEn
     const initScript = ec2.UserData.forLinux();
     initScript.addCommands(
       "set -euf -o pipefail",
+
+      "yum install -y aws-cfn-bootstrap",
       `yum install -y npm && npm install -gq @restatedev/restate@${restateNpmTag} @restatedev/restatectl@${restateNpmTag}`,
       "yum install -y docker",
       this.mountDataVolumeScript(),
@@ -286,20 +288,18 @@ export class SingleNodeRestateDeployment extends Construct implements IRestateEn
 
     // Optionally, configure and start the nginx service
     if (this.tlsEnabled) {
-      if (subnetType == ec2.SubnetType.PUBLIC) {
-        initScript.addCommands(
-          "yum install -y nginx",
-          "mkdir -p /etc/pki/private",
-          [
-            "openssl req -new -x509 -nodes -sha256 -days 365 -extensions v3_ca",
-            " -subj '/C=DE/ST=Berlin/L=Berlin/O=restate.dev/OU=demo/CN=restate.example.com'",
-            " -newkey rsa:2048 -keyout /etc/pki/private/restate-selfsigned.key -out /etc/pki/private/restate-selfsigned.crt",
-          ].join(""),
+      initScript.addCommands(
+        "yum install -y nginx",
+        "mkdir -p /etc/pki/private",
+        [
+          "openssl req -new -x509 -nodes -sha256 -days 365 -extensions v3_ca",
+          " -subj '/C=DE/ST=Berlin/L=Berlin/O=restate.dev/OU=demo/CN=restate.example.com'",
+          " -newkey rsa:2048 -keyout /etc/pki/private/restate-selfsigned.key -out /etc/pki/private/restate-selfsigned.crt",
+        ].join(""),
 
-          ["cat << EOF > /etc/nginx/conf.d/restate-ingress.conf", this.ingressNginxConfig(props), "EOF"].join("\n"),
-          "systemctl start nginx",
-        );
-      }
+        ["cat << EOF > /etc/nginx/conf.d/restate-ingress.conf", this.ingressNginxConfig(props), "EOF"].join("\n"),
+        "systemctl start nginx",
+      );
     }
 
     const cloudConfig = ec2.UserData.custom([`cloud_final_modules:`, `- [scripts-user, always]`].join("\n"));
@@ -333,6 +333,42 @@ export class SingleNodeRestateDeployment extends Construct implements IRestateEn
       ],
       userData,
     });
+
+    const cfnInstance = restateInstance.node.defaultChild as ec2.CfnInstance;
+    const instanceLogicalId = cfnInstance.logicalId;
+
+    initScript.addCommands(
+      "echo 'Waiting for Restate server admin API to become available...'",
+      "HEALTH_CHECK_URL='http://localhost:9070/health'",
+      "MAX_ATTEMPTS=60",
+      "ATTEMPT=0",
+      "",
+      "while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do",
+      "  if curl -f -s $HEALTH_CHECK_URL > /dev/null 2>&1; then",
+      "    echo 'Health check passed - Restate server is healthy'",
+      "    break",
+      "  fi",
+      "  ATTEMPT=$((ATTEMPT + 1))",
+      '  echo "Health check attempt $ATTEMPT/$MAX_ATTEMPTS failed, retrying in 5 seconds..."',
+      "  sleep 5",
+      "done",
+      "",
+      "if [ $ATTEMPT -eq $MAX_ATTEMPTS ]; then",
+      '  echo "Health check failed after $MAX_ATTEMPTS attempts"',
+      `  /opt/aws/bin/cfn-signal -e 1 --stack ${cdk.Stack.of(this).stackName} --resource ${instanceLogicalId} --region ${cdk.Stack.of(this).region}`,
+      "  exit 1",
+      "fi",
+      "",
+      `/opt/aws/bin/cfn-signal -e 0 --stack ${cdk.Stack.of(this).stackName} --resource ${instanceLogicalId} --region ${cdk.Stack.of(this).region}`,
+    );
+
+    // Add CreationPolicy to wait for cfn-signal
+    cfnInstance.cfnOptions.creationPolicy = {
+      resourceSignal: {
+        timeout: "PT10M", // 10 minutes timeout
+        count: 1,
+      },
+    };
 
     this.instance = restateInstance;
 
