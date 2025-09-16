@@ -659,7 +659,7 @@ exports[`Restate constructs Create a self-hosted Restate environment deployed on
                         yum install -y aws-cfn-bootstrap
 
                         yum install -y npm && npm install -gq
-                        @restatedev/restate@1.4 @restatedev/restatectl@1.4
+                        @restatedev/restate@1.5 @restatedev/restatectl@1.5
 
                         yum install -y docker
 
@@ -745,7 +745,7 @@ exports[`Restate constructs Create a self-hosted Restate environment deployed on
                         --log-driver=awslogs --log-opt awslogs-group=
                       - Ref: RestateLogsFD86ECAE
                       - >2-
-                         docker.restate.dev/restatedev/restate:1.4 --config-file /etc/restate/config.toml
+                         docker.restate.dev/restatedev/restate:1.5 --config-file /etc/restate/config.toml
                         yum install -y nginx
 
                         mkdir -p /etc/pki/private
@@ -1049,7 +1049,7 @@ exports[`Restate constructs Create a self-hosted Restate environment deployed on
                         yum install -y aws-cfn-bootstrap
 
                         yum install -y npm && npm install -gq
-                        @restatedev/restate@1.4 @restatedev/restatectl@1.4
+                        @restatedev/restate@1.5 @restatedev/restatectl@1.5
 
                         yum install -y docker
 
@@ -1481,10 +1481,14 @@ exports[`Restate constructs Deploy a Lambda service handler to existing Restate 
         'Fn::GetAtt':
           - RestateServiceHandlerServiceRole07B26D05
           - Arn
-      Runtime: nodejs18.x
+      Runtime:
+        'Fn::FindInMap':
+          - LatestNodeRuntimeMap
+          - Ref: 'AWS::Region'
+          - value
     DependsOn:
       - RestateServiceHandlerServiceRole07B26D05
-  RestateServiceHandlerCurrentVersion40030E671fc2ba09c2d7b4ea8c6a3f8fee895a65:
+  RestateServiceHandlerCurrentVersion40030E676e655a122aef159925e1e52d1335bae5:
     Type: 'AWS::Lambda::Version'
     Properties:
       FunctionName:
@@ -1503,7 +1507,7 @@ exports[`Restate constructs Deploy a Lambda service handler to existing Restate 
         Ref: RestateApiKey6463672F
       serviceLambdaArn:
         Ref: >-
-          RestateServiceHandlerCurrentVersion40030E671fc2ba09c2d7b4ea8c6a3f8fee895a65
+          RestateServiceHandlerCurrentVersion40030E676e655a122aef159925e1e52d1335bae5
       invokeRoleArn:
         'Fn::GetAtt':
           - InvokerRole4DB2757E
@@ -1595,6 +1599,100 @@ exports[`Restate constructs Deploy a Lambda service handler to existing Restate 
       PolicyName: ServiceDeployerInvocationPolicyD09B639D
       Roles:
         - Ref: InvokerRole4DB2757E
+Mappings:
+  LatestNodeRuntimeMap:
+    af-south-1:
+      value: nodejs22.x
+    ap-east-1:
+      value: nodejs22.x
+    ap-east-2:
+      value: nodejs22.x
+    ap-northeast-1:
+      value: nodejs22.x
+    ap-northeast-2:
+      value: nodejs22.x
+    ap-northeast-3:
+      value: nodejs22.x
+    ap-south-1:
+      value: nodejs22.x
+    ap-south-2:
+      value: nodejs22.x
+    ap-southeast-1:
+      value: nodejs22.x
+    ap-southeast-2:
+      value: nodejs22.x
+    ap-southeast-3:
+      value: nodejs22.x
+    ap-southeast-4:
+      value: nodejs22.x
+    ap-southeast-5:
+      value: nodejs22.x
+    ap-southeast-6:
+      value: nodejs22.x
+    ap-southeast-7:
+      value: nodejs22.x
+    ca-central-1:
+      value: nodejs22.x
+    ca-west-1:
+      value: nodejs22.x
+    cn-north-1:
+      value: nodejs22.x
+    cn-northwest-1:
+      value: nodejs22.x
+    eu-central-1:
+      value: nodejs22.x
+    eu-central-2:
+      value: nodejs22.x
+    eu-isoe-west-1:
+      value: nodejs22.x
+    eu-north-1:
+      value: nodejs22.x
+    eu-south-1:
+      value: nodejs22.x
+    eu-south-2:
+      value: nodejs22.x
+    eu-west-1:
+      value: nodejs22.x
+    eu-west-2:
+      value: nodejs22.x
+    eu-west-3:
+      value: nodejs22.x
+    eusc-de-east-1:
+      value: nodejs22.x
+    il-central-1:
+      value: nodejs22.x
+    me-central-1:
+      value: nodejs22.x
+    me-south-1:
+      value: nodejs22.x
+    mx-central-1:
+      value: nodejs22.x
+    sa-east-1:
+      value: nodejs22.x
+    us-east-1:
+      value: nodejs22.x
+    us-east-2:
+      value: nodejs22.x
+    us-gov-east-1:
+      value: nodejs22.x
+    us-gov-west-1:
+      value: nodejs22.x
+    us-iso-east-1:
+      value: nodejs22.x
+    us-iso-west-1:
+      value: nodejs22.x
+    us-isob-east-1:
+      value: nodejs18.x
+    us-isob-west-1:
+      value: nodejs18.x
+    us-isof-east-1:
+      value: nodejs22.x
+    us-isof-south-1:
+      value: nodejs22.x
+    us-west-1:
+      value: nodejs22.x
+    us-west-2:
+      value: nodejs22.x
 "
 `;
 
