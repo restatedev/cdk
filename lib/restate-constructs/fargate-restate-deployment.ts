@@ -28,7 +28,7 @@ const PUBLIC_ADMIN_PORT = 9070;
 const RESTATE_INGRESS_PORT = 8080;
 const RESTATE_ADMIN_PORT = 9070;
 const RESTATE_IMAGE_DEFAULT = "docker.restate.dev/restatedev/restate";
-const RESTATE_DOCKER_DEFAULT_TAG = "1.5";
+const RESTATE_DOCKER_DEFAULT_TAG = "1.6";
 const ADOT_DOCKER_DEFAULT_TAG = "latest";
 
 export interface RestateFargateProps {
