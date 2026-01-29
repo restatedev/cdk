@@ -70,6 +70,56 @@ export interface ServiceRegistrationProps {
    * Restate service is behind a load balancer.
    */
   adminUrl?: string;
+
+  /**
+   * What to do when the handler is removed from the stack.
+   * - RETAIN: Leave deployment registered in Restate (default). Use this if you want to transition to managing
+   *   deployments manually, or if you want to remove the ServiceDeployer without affecting existing registrations.
+   * - DESTROY: Force-remove the deployment from Restate. Use this if you are decommissioning the service.
+   *
+   * Default: RETAIN
+   */
+  removalPolicy?: cdk.RemovalPolicy;
+
+  /**
+   * Prune fully drained deployments of the same handler after each successful registration. Only removes deployments
+   * that have no associated services and no pinned invocations. This helps clean up old deployment versions that
+   * accumulate over time as new versions are registered.
+   *
+   * Default: false
+   */
+  pruneDrainedDeployments?: boolean;
+
+  /**
+   * Number of old drained deployment revisions to retain. Only applies if `pruneDrainedDeployments` is enabled.
+   * Drained deployments beyond this limit will be removed, oldest first.
+   *
+   * Default: 0
+   */
+  revisionHistoryLimit?: number;
+
+  /**
+   * Maximum number of drained deployments to prune per registration. Limits the cleanup work done in each
+   * deployment to avoid long-running operations. Only applies if `pruneDrainedDeployments` is enabled.
+   *
+   * Default: 10
+   */
+  maxPrunedPerRun?: number;
+
+  /**
+   * Whether to prune deployments that have only completed invocations pinned. Only applies if
+   * `pruneDrainedDeployments` is enabled.
+   *
+   * By default (false), deployments with ANY pinned invocations (including completed ones) will not be pruned.
+   * This is the conservative behavior that ensures no deployment is removed while it might still be referenced.
+   *
+   * When true, only deployments with active (non-completed) invocations will be kept. Deployments with only
+   * completed invocations will be pruned. Use this for more aggressive cleanup when you're confident that
+   * completed invocations don't need their original deployment.
+   *
+   * Default: false
+   */
+  allowPruningDeploymentsWithCompletedInvocations?: boolean;
 }
 
 /**
@@ -212,13 +262,18 @@ export class ServiceDeployer extends Construct {
         authTokenSecretArn: authToken?.secretArn,
         serviceLambdaArn: handler.functionArn,
         invokeRoleArn: invokerRole?.roleArn,
-        // removalPolicy: "retain",
+        removalPolicy: options?.removalPolicy === cdk.RemovalPolicy.DESTROY ? "destroy" : ("retain" as const),
         private: (options?.private ?? false).toString() as "true" | "false",
         configurationVersion:
-          options?.configurationVersion || handler.functionArn.endsWith(":$LATEST")
-            ? new Date().toISOString()
-            : undefined,
+          options?.configurationVersion ??
+          (handler.functionArn.endsWith(":$LATEST") ? new Date().toISOString() : undefined),
         insecure: (options?.insecure ?? false).toString() as "true" | "false",
+        pruneDrainedDeployments: (options?.pruneDrainedDeployments ?? false).toString() as "true" | "false",
+        revisionHistoryLimit: options?.revisionHistoryLimit ?? 0,
+        maxPrunedPerRun: options?.maxPrunedPerRun ?? 10,
+        allowPruningDeploymentsWithCompletedInvocations: (
+          options?.allowPruningDeploymentsWithCompletedInvocations ?? false
+        ).toString() as "true" | "false",
       } satisfies RegistrationProperties,
     });
 
