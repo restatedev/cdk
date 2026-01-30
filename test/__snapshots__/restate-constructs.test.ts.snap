@@ -659,7 +659,7 @@ exports[`Restate constructs Create a self-hosted Restate environment deployed on
                         yum install -y aws-cfn-bootstrap
 
                         yum install -y npm && npm install -gq
-                        @restatedev/restate@1.5 @restatedev/restatectl@1.5
+                        @restatedev/restate@1.6 @restatedev/restatectl@1.6
 
                         yum install -y docker
 
@@ -745,7 +745,7 @@ exports[`Restate constructs Create a self-hosted Restate environment deployed on
                         --log-driver=awslogs --log-opt awslogs-group=
                       - Ref: RestateLogsFD86ECAE
                       - >2-
-                         docker.restate.dev/restatedev/restate:1.5 --config-file /etc/restate/config.toml
+                         docker.restate.dev/restatedev/restate:1.6 --config-file /etc/restate/config.toml
                         yum install -y nginx
 
                         mkdir -p /etc/pki/private
@@ -1049,7 +1049,7 @@ exports[`Restate constructs Create a self-hosted Restate environment deployed on
                         yum install -y aws-cfn-bootstrap
 
                         yum install -y npm && npm install -gq
-                        @restatedev/restate@1.5 @restatedev/restatectl@1.5
+                        @restatedev/restate@1.6 @restatedev/restatectl@1.6
 
                         yum install -y docker
 
