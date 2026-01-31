@@ -1,0 +1,90 @@
+name: Publish to NPM
+
+on:
+  push:
+    branches: [main]
+  release:
+    types: [published]
+
+jobs:
+  publish:
+    # prevent from running on forks
+    if: github.repository_owner == 'restatedev'
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+      id-token: write # required for npm trusted publishing via OIDC
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.x"
+          registry-url: "https://registry.npmjs.org"
+
+      - run: npm ci
+
+      # Release: update version BEFORE build so artifacts have correct version
+      - name: Extract tag version
+        if: github.event_name == 'release'
+        run: |
+          echo "Full GITHUB_REF: ${GITHUB_REF}"
+          TAG_VERSION=${GITHUB_REF#refs/tags/v}
+          if [ -z "$TAG_VERSION" ]; then
+            echo "Error: TAG_VERSION is empty. Exiting."
+            exit 1
+          fi
+          echo "Extracted TAG_VERSION: $TAG_VERSION"
+          echo "TAG_VERSION=$TAG_VERSION" >> $GITHUB_ENV
+
+      - name: Update package version
+        if: github.event_name == 'release'
+        run: npm version $TAG_VERSION --no-git-tag-version
+
+      # Build and test (after version bump for releases)
+      - run: npm run build
+      - run: npm run test
+
+      # Release: commit version bump and push to main
+      - name: Commit and push release version
+        if: github.event_name == 'release'
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git commit -am "Release ${TAG_VERSION}"
+          git push origin HEAD:main
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Snapshot: create artifact for download
+      - name: Create snapshot artifact
+        if: github.event_name == 'push'
+        run: mv $(npm pack) restatedev-restate-cdk.tgz
+      - name: Upload snapshot artifact
+        if: github.event_name == 'push'
+        uses: actions/upload-artifact@v4
+        with:
+          name: restatedev-restate-cdk
+          path: restatedev-restate-cdk.tgz
+          retention-days: 1
+          if-no-files-found: error
+
+      # Snapshot publish: use X.Y.Z-SNAPSHOT-timestamp with 'dev' tag
+      - name: Publish snapshot
+        if: github.event_name == 'push'
+        run: |
+          BASE_VERSION=$(node -p "require('./package.json').version.replace(/-SNAPSHOT$/, '')")
+          npm version ${BASE_VERSION}-SNAPSHOT-$(date '+%Y%m%d%H%M%S') --git-tag-version false
+          # We use dist-tag 'dev' for snapshots to avoid users accidentally installing them
+          npm publish --provenance --tag dev --access public
+
+      # Release publish: use 'next' tag for prereleases, 'latest' for stable
+      - name: Publish release
+        if: github.event_name == 'release'
+        run: |
+          if [[ ${{ github.event.release.prerelease }} == true ]]; then
+            npm publish --provenance --tag next --access public
+          else
+            npm publish --provenance --tag latest --access public
+          fi
