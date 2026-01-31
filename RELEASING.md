@@ -1,8 +1,39 @@
 # Releasing the package
 
-- Update `RESTATE_DOCKER_DEFAULT_TAG` / `RESTATE_NPM_DEFAULT_TAG`
-- Update version in `package.json`
-- Create and publish a new release in [GitHub](https://github.com/restatedev/cdk/releases)
+## Release process
+
+1. Update `RESTATE_DOCKER_DEFAULT_TAG` / `RESTATE_NPM_DEFAULT_TAG` if needed
+2. Create and publish a new release in [GitHub](https://github.com/restatedev/cdk/releases)
+   - Use tag format `vX.Y.Z` (e.g., `v1.6.0`)
+   - Mark as pre-release if appropriate (will publish with `--tag next` instead of `--tag latest`)
+3. The `publish.yml` workflow will automatically:
+   - Extract the version from the tag
+   - Update `package.json` and commit to main
+   - Run tests
+   - Publish to npm with provenance attestation
+
+## npm trusted publishing
+
+This repository uses [npm trusted publishing](https://docs.npmjs.com/trusted-publishers/) with OpenID Connect (OIDC) for secure, token-free releases. The workflow authenticates directly with npm using GitHub's OIDC provider.
+
+**Configuration on npmjs.com:**
+
+- Owner: `restatedev`
+- Repository: `cdk`
+- Workflow: `publish.yml`
+- Environment: _(blank)_
+
+If the trusted publisher configuration is lost, reconfigure it at:
+https://www.npmjs.com/package/@restatedev/restate-cdk/access
+
+## Snapshot builds
+
+Snapshots are automatically published on every push to `main` with:
+
+- Version: `X.Y.Z-SNAPSHOT-YYYYMMDDHHmmss` (based on package.json version)
+- Tag: `dev`
+
+To install a snapshot: `npm install @restatedev/restate-cdk@dev`
 
 ## Testing major Restate version updates
 
