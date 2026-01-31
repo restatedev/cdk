@@ -23,6 +23,8 @@ jobs:
           node-version: "22.x"
           registry-url: "https://registry.npmjs.org"
 
+      # npm 11.5.1+ required for trusted publishing with OIDC
+      - run: npm install -g npm@latest
       - run: npm ci
 
       # Release: update version BEFORE build so artifacts have correct version
