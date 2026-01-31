@@ -40,13 +40,11 @@ To install a snapshot: `npm install @restatedev/restate-cdk@dev`
 Before releasing a CDK update for a new Restate major/minor version:
 
 1. **Review release notes** for breaking changes, deprecated config options, or new defaults:
-
    - Check `restate/release-notes/unreleased/*.md` for upcoming changes
    - Look for removed/renamed configuration options that the CDK might be setting
    - Verify CDK defaults (e.g., `rocksdb-total-memory-size`, `query-engine.memory-size`) make sense for small dev/test deployments
 
 2. **Update version tags** in:
-
    - `lib/restate-constructs/single-node-restate-deployment.ts`: `RESTATE_DOCKER_DEFAULT_TAG`, `RESTATE_NPM_DEFAULT_TAG`
    - `lib/restate-constructs/fargate-restate-deployment.ts`: `RESTATE_DOCKER_DEFAULT_TAG`
 
