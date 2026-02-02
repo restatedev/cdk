@@ -58,7 +58,6 @@ const deployer = new ServiceDeployer(stack, "ServiceDeployer", {
 deployer.register(handler.currentVersion, environment, {
   pruneDrainedDeployments: enablePruning,
   revisionHistoryLimit: 0,
-  allowPruningDeploymentsWithCompletedInvocations: true,
 });
 
 new cdk.CfnOutput(stack, "RestateIngressUrl", { value: environment.ingressUrl });

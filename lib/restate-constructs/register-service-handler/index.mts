@@ -62,13 +62,6 @@ export interface RegistrationProperties {
 
   /** Maximum number of drained deployments to prune per run. */
   maxPrunedPerRun?: number;
-
-  /**
-   * Whether to prune deployments that have only completed invocations pinned. Default is false (conservative).
-   * When false, deployments with ANY pinned invocations (including completed) will not be pruned.
-   * When true, only deployments with active (non-completed) invocations will be kept.
-   */
-  allowPruningDeploymentsWithCompletedInvocations?: "true" | "false";
 }
 
 type RegisterDeploymentResponse = {
@@ -308,7 +301,6 @@ export const handler = async function (event: CloudFormationCustomResourceEvent)
                 props.serviceLambdaArn,
                 props.revisionHistoryLimit ?? 0,
                 props.maxPrunedPerRun ?? 10,
-                props.allowPruningDeploymentsWithCompletedInvocations === "true",
                 authHeader,
                 rejectUnauthorized,
               );
@@ -447,7 +439,6 @@ async function pruneDrainedDeployments(
   _endpointArn: string,
   revisionHistoryLimit: number,
   maxPrunedPerRun: number,
-  allowPruningDeploymentsWithCompletedInvocations: boolean,
   authHeader: Record<string, string>,
   rejectUnauthorized: boolean,
 ) {
@@ -456,19 +447,14 @@ async function pruneDrainedDeployments(
 
   console.log(`Pruning drained deployments (keeping ${safeOffset} revisions, max ${safeLimit} per run)`);
 
-  // Find drained deployments: no associated services and no pinned invocations
-  // By default (conservative), exclude deployments with ANY pinned invocations
-  // If allowPruningDeploymentsWithCompletedInvocations is true, only exclude deployments with active invocations
+  // Find drained deployments: no associated services and no active pinned invocations
+  // Deployments with only completed invocations can be pruned
   // Prune oldest first, skip the N most recent drained ones
-  const invocationStatusFilter = allowPruningDeploymentsWithCompletedInvocations
-    ? "AND i.status != 'completed'" // Only consider active invocations
-    : ""; // Consider all invocations (conservative)
-
   const sql = `
     SELECT d.id, d.created_at
     FROM sys_deployment d
     LEFT JOIN sys_service s ON (d.id = s.deployment_id)
-    LEFT JOIN sys_invocation_status i ON (d.id = i.pinned_deployment_id ${invocationStatusFilter})
+    LEFT JOIN sys_invocation_status i ON (d.id = i.pinned_deployment_id AND i.status != 'completed')
     WHERE s.name IS NULL
       AND i.id IS NULL
     ORDER BY d.created_at DESC

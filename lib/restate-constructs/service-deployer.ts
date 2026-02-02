@@ -105,21 +105,6 @@ export interface ServiceRegistrationProps {
    * Default: 10
    */
   maxPrunedPerRun?: number;
-
-  /**
-   * Whether to prune deployments that have only completed invocations pinned. Only applies if
-   * `pruneDrainedDeployments` is enabled.
-   *
-   * By default (false), deployments with ANY pinned invocations (including completed ones) will not be pruned.
-   * This is the conservative behavior that ensures no deployment is removed while it might still be referenced.
-   *
-   * When true, only deployments with active (non-completed) invocations will be kept. Deployments with only
-   * completed invocations will be pruned. Use this for more aggressive cleanup when you're confident that
-   * completed invocations don't need their original deployment.
-   *
-   * Default: false
-   */
-  allowPruningDeploymentsWithCompletedInvocations?: boolean;
 }
 
 /**
@@ -271,9 +256,6 @@ export class ServiceDeployer extends Construct {
         pruneDrainedDeployments: (options?.pruneDrainedDeployments ?? false).toString() as "true" | "false",
         revisionHistoryLimit: options?.revisionHistoryLimit ?? 0,
         maxPrunedPerRun: options?.maxPrunedPerRun ?? 10,
-        allowPruningDeploymentsWithCompletedInvocations: (
-          options?.allowPruningDeploymentsWithCompletedInvocations ?? false
-        ).toString() as "true" | "false",
       } satisfies RegistrationProperties,
     });
 
