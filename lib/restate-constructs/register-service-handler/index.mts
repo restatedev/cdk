@@ -293,12 +293,14 @@ export const handler = async function (event: CloudFormationCustomResourceEvent)
 
         if (props.pruneDrainedDeployments === "true") {
           try {
-            if (!props.serviceLambdaArn) {
-              console.warn("Pruning requested but no serviceLambdaArn provided; skipping.");
+            const serviceNames = response.services.map((s) => s.name);
+            if (serviceNames.length === 0) {
+              console.warn("Pruning requested but no services in deployment; skipping.");
             } else {
               await pruneDrainedDeployments(
                 props.adminUrl!,
-                props.serviceLambdaArn,
+                serviceNames,
+                response.id,
                 props.revisionHistoryLimit ?? 0,
                 props.maxPrunedPerRun ?? 10,
                 authHeader,
@@ -434,51 +436,120 @@ async function findDeploymentsByEndpoint(
   return rows.map((row) => row.id as string);
 }
 
+type ListDeploymentsResponse = {
+  deployments: {
+    id: string;
+    created_at: string;
+    services: { name: string; revision: number }[];
+  }[];
+};
+
+async function listDeployments(
+  adminUrl: string,
+  authHeader: Record<string, string>,
+  rejectUnauthorized: boolean,
+): Promise<ListDeploymentsResponse["deployments"]> {
+  const listUrl = new URL(`${adminUrl}/${DEPLOYMENTS_PATH}`);
+
+  const response = await httpRequest(listUrl, {
+    method: "GET",
+    headers: authHeader,
+    timeout: 30_000,
+    rejectUnauthorized,
+  });
+
+  if (response.statusCode !== 200) {
+    throw new Error(`List deployments failed (${response.statusCode}): ${response.body}`);
+  }
+
+  return (JSON.parse(response.body) as ListDeploymentsResponse).deployments;
+}
+
+async function hasActiveInvocations(
+  adminUrl: string,
+  deploymentId: string,
+  authHeader: Record<string, string>,
+  rejectUnauthorized: boolean,
+): Promise<boolean> {
+  const sql = `
+    SELECT COUNT(*) as cnt FROM sys_invocation_status
+    WHERE pinned_deployment_id = '${escapeSqlString(deploymentId)}'
+      AND status != 'completed'
+  `;
+  const rows = await queryRestate(adminUrl, sql, authHeader, rejectUnauthorized);
+  const count = (rows[0]?.cnt as number) ?? 0;
+  return count > 0;
+}
+
 async function pruneDrainedDeployments(
   adminUrl: string,
-  _endpointArn: string,
+  serviceNames: string[],
+  currentDeploymentId: string,
   revisionHistoryLimit: number,
   maxPrunedPerRun: number,
   authHeader: Record<string, string>,
   rejectUnauthorized: boolean,
 ) {
-  const safeOffset = Math.max(0, revisionHistoryLimit);
-  const safeLimit = Math.max(1, maxPrunedPerRun);
+  const safeRevisionLimit = Math.max(0, revisionHistoryLimit);
+  const safeMaxPruned = Math.max(1, maxPrunedPerRun);
+  const serviceNameSet = new Set(serviceNames);
 
-  console.log(`Pruning drained deployments (keeping ${safeOffset} revisions, max ${safeLimit} per run)`);
+  console.log(
+    `Pruning drained deployments for services [${serviceNames.join(", ")}] ` +
+      `(keeping ${safeRevisionLimit} revisions, max ${safeMaxPruned} per run, excluding current ${currentDeploymentId})`,
+  );
 
-  // Find drained deployments: no associated services and no active pinned invocations
-  // Deployments with only completed invocations can be pruned
-  // Prune oldest first, skip the N most recent drained ones
-  const sql = `
-    SELECT d.id, d.created_at
-    FROM sys_deployment d
-    LEFT JOIN sys_service s ON (d.id = s.deployment_id)
-    LEFT JOIN sys_invocation_status i ON (d.id = i.pinned_deployment_id AND i.status != 'completed')
-    WHERE s.name IS NULL
-      AND i.id IS NULL
-    ORDER BY d.created_at DESC
-    OFFSET ${safeOffset}
-    LIMIT ${safeLimit}
-  `;
+  const allDeployments = await listDeployments(adminUrl, authHeader, rejectUnauthorized);
+  const relatedDeployments = allDeployments
+    .filter((d) => d.id !== currentDeploymentId)
+    .filter((d) => d.services.some((s) => serviceNameSet.has(s.name)))
+    .sort((a, b) => a.created_at.localeCompare(b.created_at)); // oldest first
 
-  const drainedDeployments = await queryRestate(adminUrl, sql, authHeader, rejectUnauthorized);
+  console.log(`Found ${relatedDeployments.length} related deployment(s) for these services.`);
 
-  if (drainedDeployments.length === 0) {
-    console.log("No drained deployments to prune.");
+  if (relatedDeployments.length <= safeRevisionLimit) {
+    console.log(`Not exceeding revision history limit (${safeRevisionLimit}); nothing to prune.`);
     return;
   }
 
-  console.log(`Found ${drainedDeployments.length} drained deployment(s) to prune.`);
+  const candidatesForPruning = relatedDeployments.slice(0, relatedDeployments.length - safeRevisionLimit);
+  console.log(`${candidatesForPruning.length} deployment(s) are candidates for pruning (beyond revision limit).`);
 
-  for (const deployment of drainedDeployments) {
-    const deploymentId = deployment.id as string;
-    try {
-      console.log(`Deleting drained deployment ${deploymentId}...`);
-      await deleteDeployment(adminUrl, deploymentId, authHeader, rejectUnauthorized);
-      console.log(`Deleted drained deployment ${deploymentId}.`);
-    } catch (e) {
-      console.warn(`Failed to delete drained deployment ${deploymentId}: ${(e as Error)?.message}`);
+  let prunedCount = 0;
+  for (const deployment of candidatesForPruning) {
+    if (prunedCount >= safeMaxPruned) {
+      console.log(`Reached max pruned per run (${safeMaxPruned}); stopping.`);
+      break;
     }
+
+    const hasActive = await hasActiveInvocations(adminUrl, deployment.id, authHeader, rejectUnauthorized);
+    if (hasActive) {
+      console.log(`Deployment ${deployment.id} has active invocations; skipping.`);
+      continue;
+    }
+
+    try {
+      const extraServices = deployment.services
+        .map((service) => service.name)
+        .filter((serviceName) => !serviceNameSet.has(serviceName));
+      if (extraServices.length > 0) {
+        console.log(
+          `Deployment ${deployment.id} also registered services no longer in this handler: [${[...new Set(extraServices)].join(", ")}]`,
+        );
+      }
+
+      console.log(`Deleting drained deployment ${deployment.id}...`);
+      await deleteDeployment(adminUrl, deployment.id, authHeader, rejectUnauthorized);
+      console.log(`Deleted drained deployment ${deployment.id}.`);
+      prunedCount++;
+    } catch (e) {
+      console.warn(`Failed to delete drained deployment ${deployment.id}: ${(e as Error)?.message}`);
+    }
+  }
+
+  if (prunedCount === 0) {
+    console.log("No drained deployments were pruned.");
+  } else {
+    console.log(`Pruned ${prunedCount} drained deployment(s).`);
   }
 }
