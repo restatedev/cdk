@@ -1285,10 +1285,10 @@ exports[`Restate constructs Deploy a Lambda service handler to Restate Cloud env
         'Fn::GetAtt':
           - RestateServiceHandlerServiceRole07B26D05
           - Arn
-      Runtime: nodejs18.x
+      Runtime: nodejs22.x
     DependsOn:
       - RestateServiceHandlerServiceRole07B26D05
-  RestateServiceHandlerCurrentVersion40030E671fc2ba09c2d7b4ea8c6a3f8fee895a65:
+  RestateServiceHandlerCurrentVersion40030E674d150b78008a2f2be732db1598a1a845:
     Type: 'AWS::Lambda::Version'
     Properties:
       FunctionName:
@@ -1311,7 +1311,7 @@ exports[`Restate constructs Deploy a Lambda service handler to Restate Cloud env
             - ':secretsmanager:region:account-id:secret:secret_name'
       serviceLambdaArn:
         Ref: >-
-          RestateServiceHandlerCurrentVersion40030E671fc2ba09c2d7b4ea8c6a3f8fee895a65
+          RestateServiceHandlerCurrentVersion40030E674d150b78008a2f2be732db1598a1a845
       invokeRoleArn:
         'Fn::GetAtt':
           - RestateInvokerRole42565598
@@ -1481,14 +1481,10 @@ exports[`Restate constructs Deploy a Lambda service handler to existing Restate 
         'Fn::GetAtt':
           - RestateServiceHandlerServiceRole07B26D05
           - Arn
-      Runtime:
-        'Fn::FindInMap':
-          - LatestNodeRuntimeMap
-          - Ref: 'AWS::Region'
-          - value
+      Runtime: nodejs22.x
     DependsOn:
       - RestateServiceHandlerServiceRole07B26D05
-  RestateServiceHandlerCurrentVersion40030E676e655a122aef159925e1e52d1335bae5:
+  RestateServiceHandlerCurrentVersion40030E674d150b78008a2f2be732db1598a1a845:
     Type: 'AWS::Lambda::Version'
     Properties:
       FunctionName:
@@ -1507,7 +1503,7 @@ exports[`Restate constructs Deploy a Lambda service handler to existing Restate 
         Ref: RestateApiKey6463672F
       serviceLambdaArn:
         Ref: >-
-          RestateServiceHandlerCurrentVersion40030E676e655a122aef159925e1e52d1335bae5
+          RestateServiceHandlerCurrentVersion40030E674d150b78008a2f2be732db1598a1a845
       invokeRoleArn:
         'Fn::GetAtt':
           - InvokerRole4DB2757E
@@ -1599,100 +1595,6 @@ exports[`Restate constructs Deploy a Lambda service handler to existing Restate 
       PolicyName: ServiceDeployerInvocationPolicyD09B639D
       Roles:
         - Ref: InvokerRole4DB2757E
-Mappings:
-  LatestNodeRuntimeMap:
-    af-south-1:
-      value: nodejs22.x
-    ap-east-1:
-      value: nodejs22.x
-    ap-east-2:
-      value: nodejs22.x
-    ap-northeast-1:
-      value: nodejs22.x
-    ap-northeast-2:
-      value: nodejs22.x
-    ap-northeast-3:
-      value: nodejs22.x
-    ap-south-1:
-      value: nodejs22.x
-    ap-south-2:
-      value: nodejs22.x
-    ap-southeast-1:
-      value: nodejs22.x
-    ap-southeast-2:
-      value: nodejs22.x
-    ap-southeast-3:
-      value: nodejs22.x
-    ap-southeast-4:
-      value: nodejs22.x
-    ap-southeast-5:
-      value: nodejs22.x
-    ap-southeast-6:
-      value: nodejs22.x
-    ap-southeast-7:
-      value: nodejs22.x
-    ca-central-1:
-      value: nodejs22.x
-    ca-west-1:
-      value: nodejs22.x
-    cn-north-1:
-      value: nodejs22.x
-    cn-northwest-1:
-      value: nodejs22.x
-    eu-central-1:
-      value: nodejs22.x
-    eu-central-2:
-      value: nodejs22.x
-    eu-isoe-west-1:
-      value: nodejs22.x
-    eu-north-1:
-      value: nodejs22.x
-    eu-south-1:
-      value: nodejs22.x
-    eu-south-2:
-      value: nodejs22.x
-    eu-west-1:
-      value: nodejs22.x
-    eu-west-2:
-      value: nodejs22.x
-    eu-west-3:
-      value: nodejs22.x
-    eusc-de-east-1:
-      value: nodejs22.x
-    il-central-1:
-      value: nodejs22.x
-    me-central-1:
-      value: nodejs22.x
-    me-south-1:
-      value: nodejs22.x
-    mx-central-1:
-      value: nodejs22.x
-    sa-east-1:
-      value: nodejs22.x
-    us-east-1:
-      value: nodejs22.x
-    us-east-2:
-      value: nodejs22.x
-    us-gov-east-1:
-      value: nodejs22.x
-    us-gov-west-1:
-      value: nodejs22.x
-    us-iso-east-1:
-      value: nodejs22.x
-    us-iso-west-1:
-      value: nodejs22.x
-    us-isob-east-1:
-      value: nodejs18.x
-    us-isob-west-1:
-      value: nodejs18.x
-    us-isof-east-1:
-      value: nodejs22.x
-    us-isof-south-1:
-      value: nodejs22.x
-    us-west-1:
-      value: nodejs22.x
-    us-west-2:
-      value: nodejs22.x
 "
 `;
 
@@ -1784,10 +1686,10 @@ exports[`Restate constructs Restate Cloud Environment construct with role refere
         'Fn::GetAtt':
           - RestateServiceHandlerServiceRole07B26D05
           - Arn
-      Runtime: nodejs18.x
+      Runtime: nodejs22.x
     DependsOn:
       - RestateServiceHandlerServiceRole07B26D05
-  RestateServiceHandlerCurrentVersion40030E671fc2ba09c2d7b4ea8c6a3f8fee895a65:
+  RestateServiceHandlerCurrentVersion40030E674d150b78008a2f2be732db1598a1a845:
     Type: 'AWS::Lambda::Version'
     Properties:
       FunctionName:
@@ -1810,7 +1712,7 @@ exports[`Restate constructs Restate Cloud Environment construct with role refere
             - ':secretsmanager:region:account-id:secret:secret_name'
       serviceLambdaArn:
         Ref: >-
-          RestateServiceHandlerCurrentVersion40030E671fc2ba09c2d7b4ea8c6a3f8fee895a65
+          RestateServiceHandlerCurrentVersion40030E674d150b78008a2f2be732db1598a1a845
       invokeRoleArn: 'arn:aws:iam::654654156625:role/Invoker'
       private: 'false'
       insecure: 'false'
@@ -1931,7 +1833,7 @@ exports[`Restate constructs Service Deployer overrides 1`] = `
         - arm64
       Code:
         S3Bucket: cdk-hnb659fds-assets-account-id-region
-        S3Key: 69988508d696930c762ee6a13b1279f74a5c1188c197c47f989f59ddcc6957f8.zip
+        S3Key: 00d00ebb12b16db855339e5b1a88b4dc2b9cf6509e147c47c46d68465e48b030.zip
       Description: Restate custom registration handler
       Handler: entrypoint.handler
       MemorySize: 128

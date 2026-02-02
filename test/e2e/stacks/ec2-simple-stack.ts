@@ -24,7 +24,7 @@ const stack = new cdk.Stack(app, stackName);
 
 const handler: lambda.Function = new lambda.Function(stack, "Service", {
   runtime: lambda.Runtime.NODEJS_22_X,
-  code: lambda.Code.fromAsset("../handlers/dist/"),
+  code: lambda.Code.fromAsset(path.join(__dirname, "../../handlers/dist/")),
   handler: "bundle.handler",
 });
 

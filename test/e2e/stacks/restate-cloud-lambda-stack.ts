@@ -38,6 +38,7 @@ const handler: lambda.Function = new lambda.Function(stack, "Service", {
 
 const environment = new RestateCloudEnvironment(stack, "CloudEnv", {
   environmentId: process.env.RESTATE_ENV_ID! as EnvironmentId,
+  region: (process.env.RESTATE_REGION as "eu" | "us") ?? "us",
   apiKey: new secrets.Secret(stack, "RestateCloudApiKey", {
     secretStringValue: cdk.SecretValue.unsafePlainText(process.env.RESTATE_API_KEY!),
   }),

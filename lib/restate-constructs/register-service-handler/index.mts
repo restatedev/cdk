@@ -12,8 +12,6 @@
 import type { CloudFormationCustomResourceEvent } from "aws-lambda/trigger/cloudformation-custom-resource";
 
 import { GetSecretValueCommand, SecretsManagerClient } from "@aws-sdk/client-secrets-manager";
-import { NodeHttpHandler, streamCollector } from "@aws-sdk/node-http-handler";
-import { HttpRequest } from "@aws-sdk/protocol-http";
 
 import { randomInt } from "node:crypto";
 import * as https from "node:https";
@@ -67,6 +65,54 @@ const MAX_REGISTRATION_ATTEMPTS = 3;
 const DEPLOYMENTS_PATH = "deployments";
 const SERVICES_PATH = "services";
 
+interface HttpResponse {
+  statusCode: number;
+  body: string;
+}
+
+async function httpRequest(
+  url: URL,
+  options: {
+    method: string;
+    headers?: Record<string, string>;
+    body?: string;
+    timeout?: number;
+    rejectUnauthorized?: boolean;
+  },
+): Promise<HttpResponse> {
+  return new Promise((resolve, reject) => {
+    const isHttps = url.protocol === "https:";
+    const lib = isHttps ? https : http;
+
+    const reqOptions: https.RequestOptions = {
+      hostname: url.hostname,
+      port: url.port || (isHttps ? 443 : 80),
+      path: url.pathname + url.search,
+      method: options.method,
+      headers: options.headers,
+      timeout: options.timeout,
+      rejectUnauthorized: options.rejectUnauthorized,
+    };
+
+    const req = lib.request(reqOptions, (res) => {
+      let body = "";
+      res.on("data", (chunk) => (body += chunk));
+      res.on("end", () => resolve({ statusCode: res.statusCode ?? 0, body }));
+    });
+
+    req.on("error", reject);
+    req.on("timeout", () => {
+      req.destroy();
+      reject(new Error("Request timed out"));
+    });
+
+    if (options.body) {
+      req.write(options.body);
+    }
+    req.end();
+  });
+}
+
 /**
  * Custom Resource event handler for Restate service registration. This handler backs the custom resources created by
  * {@link ServiceDeployer} to facilitate Lambda service handler discovery.
@@ -75,41 +121,13 @@ export const handler = async function (event: CloudFormationCustomResourceEvent)
   console.log({ event });
 
   const props = event.ResourceProperties as RegistrationProperties;
-
-  const httpHandler = new NodeHttpHandler({
-    httpsAgent: new https.Agent({
-      keepAlive: true,
-      rejectUnauthorized: props.insecure !== "true",
-    }),
-    httpAgent: new http.Agent({
-      keepAlive: true,
-    }),
-  });
+  const rejectUnauthorized = props.insecure !== "true";
 
   if (event.RequestType === "Delete") {
     // Since we retain older Lambda handler versions on update, we also leave the registered service alone. There may
     // be unfinished invocations that require it; in the future we would want to inform Restate that we want to
     // de-register the service, and wait for Restate to let us know that it is safe to delete the deployed Function
     // version from Lambda.
-
-    // const props = event.ResourceProperties as RegistrationProperties;
-    // if (props.removalPolicy === cdk.RemovalPolicy.DESTROY) {
-    //   console.log(`De-registering service ${props.serviceLambdaArn}`);
-    //   const controller = new AbortController();
-    //   const id = btoa(props.serviceLambdaArn!); // TODO: we should be treating service ids as opaque
-    //   const deleteCallTimeout = setTimeout(() => controller.abort("timeout"), 5_000);
-    //   const deleteResponse = await fetch(`${props.adminUrl}/${DEPLOYMENTS_PATH}/${id}?force=true`, {
-    //     signal: controller.signal,
-    //     method: "DELETE",
-    //     agent: agentSelector,
-    //   }).finally(() => clearTimeout(deleteCallTimeout));
-    //
-    //   console.log(`Got delete response back: ${deleteResponse.status}`);
-    //   if (deleteResponse.status != 202) {
-    //     throw new Error(`Removing service deployment failed: ${deleteResponse.statusText} (${deleteResponse.status})`);
-    //   }
-    // }
-
     console.warn("De-registering services is not supported currently. Previous version will remain registered.");
     return;
   }
@@ -124,30 +142,21 @@ export const handler = async function (event: CloudFormationCustomResourceEvent)
   console.log(`Performing health check against: ${healthCheckUrl}`);
   while (true) {
     console.log(`Making health check request #${attempt}...`);
-    let healthResponse = undefined;
-    let errorMessage = undefined;
+    let healthResponse: HttpResponse | undefined = undefined;
+    let errorMessage: string | undefined = undefined;
     try {
-      healthResponse = (
-        await httpHandler.handle(
-          new HttpRequest({
-            headers: authHeader,
-            protocol: healthCheckUrl.protocol,
-            hostname: healthCheckUrl.hostname,
-            port: healthCheckUrl.port ? Number(healthCheckUrl.port) : undefined,
-            path: healthCheckUrl.pathname,
-            method: "GET",
-          }),
-          { requestTimeout: 5_000 },
-        )
-      ).response;
+      healthResponse = await httpRequest(healthCheckUrl, {
+        method: "GET",
+        headers: authHeader,
+        timeout: 5_000,
+        rejectUnauthorized,
+      });
 
       console.log(`Got health check response back: ${healthResponse.statusCode}`);
       if (healthResponse.statusCode >= 200 && healthResponse.statusCode < 300) {
         break;
       }
-      console.error(
-        `Restate health check failed: ${healthResponse.reason} (${healthResponse.statusCode}; attempt ${attempt})`,
-      );
+      console.error(`Restate health check failed: (${healthResponse.statusCode}; attempt ${attempt})`);
     } catch (e) {
       errorMessage = (e as Error)?.message;
       console.error(`Restate health check failed: "${errorMessage}" (attempt ${attempt})`);
@@ -155,7 +164,7 @@ export const handler = async function (event: CloudFormationCustomResourceEvent)
 
     if (attempt >= MAX_HEALTH_CHECK_ATTEMPTS) {
       console.error(`Admin service health check failing after ${attempt} attempts.`);
-      throw new Error(errorMessage ?? `${healthResponse?.reason} (${healthResponse?.statusCode})`);
+      throw new Error(errorMessage ?? `(${healthResponse?.statusCode})`);
     }
     attempt += 1;
 
@@ -178,28 +187,19 @@ export const handler = async function (event: CloudFormationCustomResourceEvent)
     try {
       console.log(`Making registration request #${attempt}...`);
 
-      const registerDeploymentResponse = (
-        await httpHandler.handle(
-          new HttpRequest({
-            body: registrationRequest,
-            headers: {
-              "Content-Type": "application/json",
-              ...authHeader,
-            },
-            protocol: deploymentsUrl.protocol,
-            hostname: deploymentsUrl.hostname,
-            port: deploymentsUrl.port ? Number(deploymentsUrl.port) : undefined,
-            path: deploymentsUrl.pathname,
-            method: "POST",
-          }),
-          { requestTimeout: 10_000 },
-        )
-      ).response;
+      const registerDeploymentResponse = await httpRequest(deploymentsUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...authHeader,
+        },
+        body: registrationRequest,
+        timeout: 10_000,
+        rejectUnauthorized,
+      });
 
       if (registerDeploymentResponse.statusCode >= 200 && registerDeploymentResponse.statusCode < 300) {
-        const data = await streamCollector(registerDeploymentResponse.body);
-        const dataStr = new TextDecoder().decode(data);
-        const response = JSON.parse(dataStr) as RegisterDeploymentResponse;
+        const response = JSON.parse(registerDeploymentResponse.body) as RegisterDeploymentResponse;
 
         if (props.servicePath && !response.services.find((s) => s.name === props.servicePath)) {
           failureReason =
@@ -225,27 +225,20 @@ export const handler = async function (event: CloudFormationCustomResourceEvent)
           console.log(`Marking service ${service.name} as ${isPublic ? "public" : "private"}...`);
           const patchUrl = new URL(`${props.adminUrl}/${SERVICES_PATH}/${service.name}`);
 
-          const patchResponse = (
-            await httpHandler.handle(
-              new HttpRequest({
-                body: JSON.stringify({ public: isPublic }),
-                headers: {
-                  "Content-Type": "application/json",
-                  ...authHeader,
-                },
-                protocol: patchUrl.protocol,
-                hostname: patchUrl.hostname,
-                port: patchUrl.port ? Number(patchUrl.port) : undefined,
-                path: patchUrl.pathname,
-                method: "PATCH",
-              }),
-              { requestTimeout: 10_000 },
-            )
-          ).response;
+          const patchResponse = await httpRequest(patchUrl, {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+              ...authHeader,
+            },
+            body: JSON.stringify({ public: isPublic }),
+            timeout: 10_000,
+            rejectUnauthorized,
+          });
 
           console.log(`Got patch response back: ${patchResponse.statusCode}`);
           if (patchResponse.statusCode != 200) {
-            failureReason = `Marking service as ${props.private ? "private" : "public"} failed: ${patchResponse.reason} (${patchResponse.statusCode})`;
+            failureReason = `Marking service as ${props.private ? "private" : "public"} failed: (${patchResponse.statusCode})`;
             break registration_retry_loop; // don't throw immediately - let retry loop decide whether to abort s
           }
 
@@ -254,14 +247,11 @@ export const handler = async function (event: CloudFormationCustomResourceEvent)
 
         return; // Overall success!
       } else {
-        const errorBody = await streamCollector(registerDeploymentResponse.body);
-        const errorBodyStr = new TextDecoder().decode(errorBody);
-
-        failureReason = `Registration failed (${registerDeploymentResponse.reason}): ${errorBodyStr}`;
+        failureReason = `Registration failed (${registerDeploymentResponse.statusCode}): ${registerDeploymentResponse.body}`;
         console.log({
           message: `Got error response from Restate.`,
           code: registerDeploymentResponse.statusCode,
-          body: errorBody,
+          body: registerDeploymentResponse.body,
         });
       }
     } catch (e) {
