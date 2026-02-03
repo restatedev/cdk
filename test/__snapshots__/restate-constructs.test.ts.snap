@@ -1316,8 +1316,12 @@ exports[`Restate constructs Deploy a Lambda service handler to Restate Cloud env
         'Fn::GetAtt':
           - RestateInvokerRole42565598
           - Arn
+      removalPolicy: retain
       private: 'false'
       insecure: 'false'
+      pruneDrainedDeployments: 'false'
+      revisionHistoryLimit: 0
+      maxPrunedPerRun: 10
     DependsOn:
       - ServiceDeployerInvocationPolicyD09B639D
     UpdateReplacePolicy: Delete
@@ -1508,8 +1512,12 @@ exports[`Restate constructs Deploy a Lambda service handler to existing Restate 
         'Fn::GetAtt':
           - InvokerRole4DB2757E
           - Arn
+      removalPolicy: retain
       private: 'false'
       insecure: 'false'
+      pruneDrainedDeployments: 'false'
+      revisionHistoryLimit: 0
+      maxPrunedPerRun: 10
     DependsOn:
       - ServiceDeployerInvocationPolicyD09B639D
     UpdateReplacePolicy: Delete
@@ -1714,8 +1722,12 @@ exports[`Restate constructs Restate Cloud Environment construct with role refere
         Ref: >-
           RestateServiceHandlerCurrentVersion40030E674d150b78008a2f2be732db1598a1a845
       invokeRoleArn: 'arn:aws:iam::654654156625:role/Invoker'
+      removalPolicy: retain
       private: 'false'
       insecure: 'false'
+      pruneDrainedDeployments: 'false'
+      revisionHistoryLimit: 0
+      maxPrunedPerRun: 10
     DependsOn:
       - ServiceDeployerInvocationPolicyD09B639D
     UpdateReplacePolicy: Delete
@@ -1833,7 +1845,7 @@ exports[`Restate constructs Service Deployer overrides 1`] = `
         - arm64
       Code:
         S3Bucket: cdk-hnb659fds-assets-account-id-region
-        S3Key: 00d00ebb12b16db855339e5b1a88b4dc2b9cf6509e147c47c46d68465e48b030.zip
+        S3Key: 3e8c1652eeb2e525a478419d4009a3ed4e021bf98fc70eac7f4294d66f5910bc.zip
       Description: Restate custom registration handler
       Handler: entrypoint.handler
       MemorySize: 128
@@ -1856,5 +1868,150 @@ exports[`Restate constructs Service Deployer overrides 1`] = `
       RetentionInDays: 30
     UpdateReplacePolicy: Retain
     DeletionPolicy: RetainExceptOnCreate
+"
+`;
+
+exports[`Restate constructs Service Deployer with removal policy and pruning options 1`] = `
+"Resources:
+  InvokerRole4DB2757E:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: 'sts:AssumeRole'
+            Effect: Allow
+            Principal:
+              AWS:
+                'Fn::Join':
+                  - ''
+                  - - 'arn:'
+                    - Ref: 'AWS::Partition'
+                    - ':iam::account-id:root'
+        Version: '2012-10-17'
+  RestateServiceHandlerServiceRole07B26D05:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: 'sts:AssumeRole'
+            Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+        Version: '2012-10-17'
+      ManagedPolicyArns:
+        - 'Fn::Join':
+            - ''
+            - - 'arn:'
+              - Ref: 'AWS::Partition'
+              - ':iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
+  RestateServiceHandler71409CD7:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      Code: Any<Object>
+      Handler: index.handler
+      Role:
+        'Fn::GetAtt':
+          - RestateServiceHandlerServiceRole07B26D05
+          - Arn
+      Runtime: nodejs22.x
+    DependsOn:
+      - RestateServiceHandlerServiceRole07B26D05
+  RestateServiceHandlerCurrentVersion40030E674d150b78008a2f2be732db1598a1a845:
+    Type: 'AWS::Lambda::Version'
+    Properties:
+      FunctionName:
+        Ref: RestateServiceHandler71409CD7
+    Metadata:
+      'aws:cdk:do-not-refactor': true
+  RestateServiceHandlerCurrentVersionRestateServiceDeployment1DB3C4D6:
+    Type: 'Custom::RestateServiceDeployment'
+    Properties:
+      ServiceToken:
+        'Fn::GetAtt':
+          - ServiceDeployerEventHandler89EAD25F
+          - Arn
+      adminUrl: 'https://restate.example.com:9070'
+      serviceLambdaArn:
+        Ref: >-
+          RestateServiceHandlerCurrentVersion40030E674d150b78008a2f2be732db1598a1a845
+      invokeRoleArn:
+        'Fn::GetAtt':
+          - InvokerRole4DB2757E
+          - Arn
+      removalPolicy: destroy
+      private: 'false'
+      insecure: 'false'
+      pruneDrainedDeployments: 'true'
+      revisionHistoryLimit: 5
+      maxPrunedPerRun: 10
+    DependsOn:
+      - ServiceDeployerInvocationPolicyD09B639D
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+  ServiceDeployerEventHandlerServiceRoleF133584F:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: 'sts:AssumeRole'
+            Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+        Version: '2012-10-17'
+      ManagedPolicyArns:
+        - 'Fn::Join':
+            - ''
+            - - 'arn:'
+              - Ref: 'AWS::Partition'
+              - ':iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
+  ServiceDeployerEventHandler89EAD25F:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      Architectures:
+        - arm64
+      Code: Any<Object>
+      Description: Restate custom registration handler
+      Handler: entrypoint.handler
+      MemorySize: 128
+      Role:
+        'Fn::GetAtt':
+          - ServiceDeployerEventHandlerServiceRoleF133584F
+          - Arn
+      Runtime: nodejs22.x
+      Timeout: 300
+    DependsOn:
+      - ServiceDeployerEventHandlerServiceRoleF133584F
+  ServiceDeployerDeploymentLogs5B8BE5D2:
+    Type: 'AWS::Logs::LogGroup'
+    Properties:
+      LogGroupName:
+        'Fn::Join':
+          - ''
+          - - /aws/lambda/
+            - Ref: ServiceDeployerEventHandler89EAD25F
+      RetentionInDays: 30
+    UpdateReplacePolicy: Retain
+    DeletionPolicy: RetainExceptOnCreate
+  ServiceDeployerInvocationPolicyD09B639D:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyDocument:
+        Statement:
+          - Action: 'lambda:InvokeFunction'
+            Effect: Allow
+            Resource:
+              - 'Fn::GetAtt':
+                  - RestateServiceHandler71409CD7
+                  - Arn
+              - 'Fn::Join':
+                  - ''
+                  - - 'Fn::GetAtt':
+                        - RestateServiceHandler71409CD7
+                        - Arn
+                    - ':*'
+        Version: '2012-10-17'
+      PolicyName: ServiceDeployerInvocationPolicyD09B639D
+      Roles:
+        - Ref: InvokerRole4DB2757E
 "
 `;

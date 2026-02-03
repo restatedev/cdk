@@ -19,6 +19,11 @@ import { EnvironmentId, RestateCloudEnvironment, ServiceDeployer } from "../../.
 // Deploy with: RESTATE_ENV_ID=env_... RESTATE_API_KEY=key_... npx cdk --app 'npx tsx restate-cloud.e2e.ts' deploy
 const app = new cdk.App();
 const stackName = app.node.tryGetContext("stack_name") ?? "e2e-RestateCloud";
+
+// Optional context variable to force new Lambda versions on re-deployment
+const configurationVersion = app.node.tryGetContext("configuration_version");
+const enablePruning = app.node.tryGetContext("enable_pruning") === "true";
+
 const stack = new cdk.Stack(app, stackName, {
   env: {
     account: process.env.CDK_DEFAULT_ACCOUNT,
@@ -34,6 +39,7 @@ const handler: lambda.Function = new lambda.Function(stack, "Service", {
   runtime: lambda.Runtime.NODEJS_LATEST,
   code: lambda.Code.fromAsset("../handlers/dist/"),
   handler: "bundle.handler",
+  environment: configurationVersion ? { CONFIGURATION_VERSION: configurationVersion } : undefined,
 });
 
 const environment = new RestateCloudEnvironment(stack, "CloudEnv", {
@@ -49,8 +55,12 @@ const deployer = new ServiceDeployer(stack, "ServiceDeployer", {
   removalPolicy: cdk.RemovalPolicy.DESTROY,
 });
 
-deployer.deployService("Greeter", handler.currentVersion, environment);
+deployer.register(handler.currentVersion, environment, {
+  pruneDrainedDeployments: enablePruning,
+  revisionHistoryLimit: 0,
+});
 
 new cdk.CfnOutput(stack, "RestateIngressUrl", { value: environment.ingressUrl });
+new cdk.CfnOutput(stack, "RestateAdminUrl", { value: environment.adminUrl });
 
 app.synth();

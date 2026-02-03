@@ -170,6 +170,35 @@ describe("Restate constructs", () => {
     });
   });
 
+  test("Service Deployer with removal policy and pruning options", () => {
+    const app = new cdk.App();
+    const stack = new cdk.Stack(app, "ServiceDeployerOptions", {
+      env: { account: "account-id", region: "region" },
+    });
+
+    const invokerRole = new iam.Role(stack, "InvokerRole", { assumedBy: new iam.AccountRootPrincipal() });
+
+    const restateEnvironment = RestateEnvironment.fromAttributes({
+      adminUrl: "https://restate.example.com:9070",
+      invokerRole,
+    });
+
+    const handler = mockHandler(stack);
+    const serviceDeployer = new ServiceDeployer(stack, "ServiceDeployer", {
+      code: lambda.Code.fromAsset("dist/register-service-handler"),
+    });
+    serviceDeployer.register(handler.currentVersion, restateEnvironment, {
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      pruneDrainedDeployments: true,
+      revisionHistoryLimit: 5,
+    });
+
+    expect(stack).toMatchCdkSnapshot({
+      ignoreAssets: true,
+      yaml: true,
+    });
+  });
+
   test("Create a self-hosted Restate environment deployed on EC2", () => {
     const app = new cdk.App();
     const stack = new cdk.Stack(app, "RestateSelfHostedServerEc2Stack", {
