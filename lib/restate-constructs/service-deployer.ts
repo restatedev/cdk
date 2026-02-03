@@ -105,6 +105,49 @@ export interface ServiceRegistrationProps {
    * Default: 10
    */
   maxPrunedPerRun?: number;
+
+  /**
+   * Force deployment registration, overwriting any existing deployment at the same endpoint. This allows
+   * breaking changes such as removing service handlers.
+   *
+   * When enabled, both breaking schema changes and deployment overwrites are allowed. This is the most
+   * permissive option but may cause issues with in-flight invocations that are pinned to the existing
+   * deployment.
+   *
+   * | Setting               | Breaking changes | Overwrites |
+   * |-----------------------|------------------|------------|
+   * | `force: true`         | Allowed          | Allowed    |
+   * | `breaking: true`      | Allowed          | Forbidden  |
+   * | Neither               | Forbidden        | Forbidden  |
+   *
+   * Note: If both `force` and `breaking` are set, `force` takes precedence.
+   *
+   * @see breaking for a safer alternative that allows breaking changes without overwriting
+   * @default false
+   */
+  force?: boolean;
+
+  /**
+   * Allow breaking schema changes (e.g., removing handlers, changing service types) without overwriting
+   * the existing deployment. This is safer than `force` because existing deployments are preserved,
+   * allowing in-flight invocations to complete on the previous version.
+   *
+   * Use this when evolving services that may have breaking API changes but you want to preserve existing
+   * deployment versions for in-progress work.
+   *
+   * | Setting               | Breaking changes | Overwrites |
+   * |-----------------------|------------------|------------|
+   * | `force: true`         | Allowed          | Allowed    |
+   * | `breaking: true`      | Allowed          | Forbidden  |
+   * | Neither               | Forbidden        | Forbidden  |
+   *
+   * Note: If both `force` and `breaking` are set, `force` takes precedence. To use the safer `breaking`
+   * behavior, set `force: false` and `breaking: true`.
+   *
+   * @see force for allowing both breaking changes and overwrites
+   * @default false
+   */
+  breaking?: boolean;
 }
 
 /**
@@ -256,6 +299,8 @@ export class ServiceDeployer extends Construct {
         pruneDrainedDeployments: (options?.pruneDrainedDeployments ?? false).toString() as "true" | "false",
         revisionHistoryLimit: options?.revisionHistoryLimit ?? 0,
         maxPrunedPerRun: options?.maxPrunedPerRun ?? 10,
+        force: (options?.force ?? false).toString() as "true" | "false",
+        breaking: (options?.breaking ?? false).toString() as "true" | "false",
       } satisfies RegistrationProperties,
     });
 

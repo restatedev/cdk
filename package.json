@@ -44,9 +44,9 @@
     "zx": "^8.8.5"
   },
   "peerDependencies": {
-    "aws-cdk": "^2.236.0",
-    "aws-cdk-lib": "^2.236.0",
-    "constructs": "^10.4.5",
+    "aws-cdk": "^2.215.0",
+    "aws-cdk-lib": "^2.215.0",
+    "constructs": "^10.3.0",
     "node-fetch": "^3.3.2"
   },
   "directories": {
