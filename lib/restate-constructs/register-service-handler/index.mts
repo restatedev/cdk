@@ -62,6 +62,33 @@ export interface RegistrationProperties {
 
   /** Maximum number of drained deployments to prune per run. */
   maxPrunedPerRun?: number;
+
+  /**
+   * Whether to force deployment registration, overwriting any existing deployment at the same endpoint and allowing
+   * breaking changes such as removing handlers.
+   *
+   * When `force` is true, both breaking changes (e.g., removing handlers) and overwriting existing deployments are
+   * allowed. This is the most permissive option but may cause issues with in-flight invocations.
+   *
+   * Consider using `breaking` instead if you only need to allow schema changes without overwriting deployments.
+   *
+   * @see breaking for a safer alternative that allows breaking changes without overwriting
+   */
+  force?: "true" | "false";
+
+  /**
+   * Whether to allow breaking schema changes (e.g., removing handlers, changing service types) without overwriting
+   * the existing deployment. This is safer than `force` because it won't affect in-flight invocations that are
+   * pinned to the existing deployment.
+   *
+   * Use this when evolving services that may have breaking API changes but you want to preserve existing deployment
+   * versions for in-progress work.
+   *
+   * Note: If `force` is set to true, it takes precedence and both breaking changes and overwrites are allowed.
+   *
+   * @see force for allowing both breaking changes and overwrites
+   */
+  breaking?: "true" | "false";
 }
 
 type RegisterDeploymentResponse = {
@@ -223,6 +250,8 @@ export const handler = async function (event: CloudFormationCustomResourceEvent)
   const registrationRequest = JSON.stringify({
     arn: props.serviceLambdaArn,
     assume_role_arn: props.invokeRoleArn,
+    force: props.force === "true",
+    breaking: props.breaking === "true",
   });
 
   let failureReason;

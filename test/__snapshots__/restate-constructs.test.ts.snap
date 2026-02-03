@@ -1322,6 +1322,8 @@ exports[`Restate constructs Deploy a Lambda service handler to Restate Cloud env
       pruneDrainedDeployments: 'false'
       revisionHistoryLimit: 0
       maxPrunedPerRun: 10
+      force: 'false'
+      breaking: 'false'
     DependsOn:
       - ServiceDeployerInvocationPolicyD09B639D
     UpdateReplacePolicy: Delete
@@ -1518,6 +1520,8 @@ exports[`Restate constructs Deploy a Lambda service handler to existing Restate 
       pruneDrainedDeployments: 'false'
       revisionHistoryLimit: 0
       maxPrunedPerRun: 10
+      force: 'false'
+      breaking: 'false'
     DependsOn:
       - ServiceDeployerInvocationPolicyD09B639D
     UpdateReplacePolicy: Delete
@@ -1728,6 +1732,8 @@ exports[`Restate constructs Restate Cloud Environment construct with role refere
       pruneDrainedDeployments: 'false'
       revisionHistoryLimit: 0
       maxPrunedPerRun: 10
+      force: 'false'
+      breaking: 'false'
     DependsOn:
       - ServiceDeployerInvocationPolicyD09B639D
     UpdateReplacePolicy: Delete
@@ -1845,7 +1851,7 @@ exports[`Restate constructs Service Deployer overrides 1`] = `
         - arm64
       Code:
         S3Bucket: cdk-hnb659fds-assets-account-id-region
-        S3Key: 3e8c1652eeb2e525a478419d4009a3ed4e021bf98fc70eac7f4294d66f5910bc.zip
+        S3Key: 8ed2b7e40aa8b43d18da885b2d5ec8673277d0810b888d6becb080a6f280a64f.zip
       Description: Restate custom registration handler
       Handler: entrypoint.handler
       MemorySize: 128
@@ -1944,6 +1950,8 @@ exports[`Restate constructs Service Deployer with removal policy and pruning opt
       pruneDrainedDeployments: 'true'
       revisionHistoryLimit: 5
       maxPrunedPerRun: 10
+      force: 'false'
+      breaking: 'false'
     DependsOn:
       - ServiceDeployerInvocationPolicyD09B639D
     UpdateReplacePolicy: Delete
