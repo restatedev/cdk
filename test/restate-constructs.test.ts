@@ -15,6 +15,7 @@ import * as iam from "aws-cdk-lib/aws-iam";
 import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as route53 from "aws-cdk-lib/aws-route53";
 import * as secrets from "aws-cdk-lib/aws-secretsmanager";
+import { Template } from "aws-cdk-lib/assertions";
 import "jest-cdk-snapshot";
 import {
   FargateRestateDeployment,
@@ -233,6 +234,53 @@ describe("Restate constructs", () => {
       ignoreAssets: true,
       yaml: true,
     });
+  });
+
+  test("Service Deployer health check retry overrides are forwarded to the custom resource", () => {
+    const app = new cdk.App();
+    const stack = new cdk.Stack(app, "ServiceDeployerRetryOverrides", {
+      env: { account: "account-id", region: "region" },
+    });
+
+    const restateEnvironment = RestateEnvironment.fromAttributes({
+      adminUrl: "https://restate.example.com:9070",
+    });
+
+    const handler = mockHandler(stack);
+    const serviceDeployer = new ServiceDeployer(stack, "ServiceDeployer", {
+      code: lambda.Code.fromAsset("dist/register-service-handler"),
+    });
+    serviceDeployer.register(handler.currentVersion, restateEnvironment, {
+      healthCheckRetryAttempts: 7,
+      healthCheckMaxBackoff: cdk.Duration.seconds(15),
+    });
+
+    const properties = Template.fromStack(stack).findResources("Custom::RestateServiceDeployment");
+    const customResource = Object.values(properties)[0]!.Properties as Record<string, unknown>;
+    expect(customResource.healthCheckRetryAttempts).toBe(7);
+    expect(customResource.healthCheckMaxBackoffSeconds).toBe(15);
+  });
+
+  test("Service Deployer omits health check retry properties when not set", () => {
+    const app = new cdk.App();
+    const stack = new cdk.Stack(app, "ServiceDeployerRetryDefaults", {
+      env: { account: "account-id", region: "region" },
+    });
+
+    const restateEnvironment = RestateEnvironment.fromAttributes({
+      adminUrl: "https://restate.example.com:9070",
+    });
+
+    const handler = mockHandler(stack);
+    const serviceDeployer = new ServiceDeployer(stack, "ServiceDeployer", {
+      code: lambda.Code.fromAsset("dist/register-service-handler"),
+    });
+    serviceDeployer.register(handler.currentVersion, restateEnvironment);
+
+    const properties = Template.fromStack(stack).findResources("Custom::RestateServiceDeployment");
+    const customResource = Object.values(properties)[0]!.Properties as Record<string, unknown>;
+    expect("healthCheckRetryAttempts" in customResource).toBe(false);
+    expect("healthCheckMaxBackoffSeconds" in customResource).toBe(false);
   });
 
   test("[Experimental] Create a self-hosted Restate environment deployed on ECS Fargate", () => {

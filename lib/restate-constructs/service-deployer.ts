@@ -148,6 +148,25 @@ export interface ServiceRegistrationProps {
    * @default false
    */
   breaking?: boolean;
+
+  /**
+   * Maximum number of admin health check attempts before the deployer gives up and reports failure to
+   * CloudFormation. Defaults to a value that, combined with `healthCheckMaxBackoff`, keeps the worst-case
+   * loop comfortably below the deployer Lambda's 5-minute default timeout. Increase only if you also
+   * raise the deployer's Lambda `timeout` to match.
+   *
+   * @default 10
+   */
+  healthCheckRetryAttempts?: number;
+
+  /**
+   * Cap on the per-iteration backoff sleep used during admin health check retries. Without a cap, the
+   * exponential backoff grows fast enough that the deployer Lambda can be killed by the runtime mid-loop,
+   * leaving CloudFormation to wait for its 60-minute step timeout.
+   *
+   * @default Duration.seconds(20)
+   */
+  healthCheckMaxBackoff?: cdk.Duration;
 }
 
 /**
@@ -301,6 +320,13 @@ export class ServiceDeployer extends Construct {
         maxPrunedPerRun: options?.maxPrunedPerRun ?? 10,
         force: (options?.force ?? false).toString() as "true" | "false",
         breaking: (options?.breaking ?? false).toString() as "true" | "false",
+        // Forward retry knobs only when the caller sets them, to avoid CFN property diffs for existing users.
+        ...(options?.healthCheckRetryAttempts !== undefined
+          ? { healthCheckRetryAttempts: options.healthCheckRetryAttempts }
+          : {}),
+        ...(options?.healthCheckMaxBackoff !== undefined
+          ? { healthCheckMaxBackoffSeconds: options.healthCheckMaxBackoff.toSeconds() }
+          : {}),
       } satisfies RegistrationProperties,
     });
 

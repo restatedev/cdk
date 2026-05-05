@@ -10,6 +10,7 @@
  */
 
 import type { CloudFormationCustomResourceEvent } from "aws-lambda/trigger/cloudformation-custom-resource";
+import type { Context } from "aws-lambda";
 
 import { GetSecretValueCommand, SecretsManagerClient } from "@aws-sdk/client-secrets-manager";
 
@@ -89,6 +90,12 @@ export interface RegistrationProperties {
    * @see force for allowing both breaking changes and overwrites
    */
   breaking?: "true" | "false";
+
+  /** Override the maximum number of admin health check attempts before giving up. */
+  healthCheckRetryAttempts?: number;
+
+  /** Cap, in seconds, on the per-iteration backoff sleep used during health check retries. */
+  healthCheckMaxBackoffSeconds?: number;
 }
 
 type RegisterDeploymentResponse = {
@@ -96,11 +103,21 @@ type RegisterDeploymentResponse = {
   services: { name: string; revision: number; public: boolean }[];
 };
 
-const MAX_HEALTH_CHECK_ATTEMPTS = 10; // This is intentionally quite long to allow some time for first-run EC2 and Docker boot up
+const DEFAULT_HEALTH_CHECK_ATTEMPTS = 10; // Long enough to absorb first-run EC2/Docker boot up.
+const DEFAULT_HEALTH_CHECK_MAX_BACKOFF_MS = 20_000;
+const HEALTH_CHECK_REQUEST_TIMEOUT_MS = 5_000;
+// Reserve at the end of the Lambda budget for the registration retries that follow a successful health check, optional
+// pruning, and the CFN response submission. The deadline guard in the health check loop refuses to keep retrying
+// once the remaining time would not cover this reserve plus the next request.
+const POST_HEALTH_CHECK_RESERVE_MS = 60_000;
 const MAX_REGISTRATION_ATTEMPTS = 3;
 
 const DEPLOYMENTS_PATH = "deployments";
 const SERVICES_PATH = "services";
+
+function healthCheckBackoffBaseMs(attempt: number, maxBackoffMs: number): number {
+  return Math.min(2 ** attempt * 1_000, maxBackoffMs);
+}
 
 interface HttpResponse {
   statusCode: number;
@@ -154,11 +171,23 @@ async function httpRequest(
  * Custom Resource event handler for Restate service registration. This handler backs the custom resources created by
  * {@link ServiceDeployer} to facilitate Lambda service handler discovery.
  */
-export const handler = async function (event: CloudFormationCustomResourceEvent) {
+export const handler = async function (event: CloudFormationCustomResourceEvent, context: Context) {
   console.log({ event });
 
   const props = event.ResourceProperties as RegistrationProperties;
   const rejectUnauthorized = props.insecure !== "true";
+
+  const maxHealthCheckAttempts = positiveIntOr(
+    props.healthCheckRetryAttempts,
+    DEFAULT_HEALTH_CHECK_ATTEMPTS,
+    "healthCheckRetryAttempts",
+  );
+  const healthCheckMaxBackoffMs =
+    positiveIntOr(
+      props.healthCheckMaxBackoffSeconds,
+      DEFAULT_HEALTH_CHECK_MAX_BACKOFF_MS / 1_000,
+      "healthCheckMaxBackoffSeconds",
+    ) * 1_000;
 
   if (event.RequestType === "Delete") {
     if (props.removalPolicy !== "destroy") {
@@ -221,7 +250,7 @@ export const handler = async function (event: CloudFormationCustomResourceEvent)
       healthResponse = await httpRequest(healthCheckUrl, {
         method: "GET",
         headers: authHeader,
-        timeout: 5_000,
+        timeout: HEALTH_CHECK_REQUEST_TIMEOUT_MS,
         rejectUnauthorized,
       });
 
@@ -235,13 +264,21 @@ export const handler = async function (event: CloudFormationCustomResourceEvent)
       console.error(`Restate health check failed: "${errorMessage}" (attempt ${attempt})`);
     }
 
-    if (attempt >= MAX_HEALTH_CHECK_ATTEMPTS) {
+    if (attempt >= maxHealthCheckAttempts) {
       console.error(`Admin service health check failing after ${attempt} attempts.`);
       throw new Error(errorMessage ?? `(${healthResponse?.statusCode})`);
     }
     attempt += 1;
 
-    const waitTimeMillis = randomInt(2_000) + 2 ** attempt * 1_000; // 3s -> 6s -> 10s -> 18s -> 34s
+    const waitTimeMillis = randomInt(2_000) + healthCheckBackoffBaseMs(attempt, healthCheckMaxBackoffMs);
+    const requiredMs = waitTimeMillis + HEALTH_CHECK_REQUEST_TIMEOUT_MS + POST_HEALTH_CHECK_RESERVE_MS;
+    if (context && context.getRemainingTimeInMillis() < requiredMs) {
+      throw new Error(
+        `Health check loop aborted to preserve Lambda budget for CloudFormation response: ` +
+          `${context.getRemainingTimeInMillis()}ms remaining, need ${requiredMs}ms. ` +
+          `Last error: ${errorMessage ?? `(${healthResponse?.statusCode})`}`,
+      );
+    }
     console.log(`Retrying after ${waitTimeMillis} ms...`);
     await sleep(waitTimeMillis);
   }
@@ -390,6 +427,17 @@ async function createAuthHeader(props: RegistrationProperties): Promise<Record<s
 
 async function sleep(millis: number) {
   return new Promise((resolve) => setTimeout(resolve, millis));
+}
+
+function positiveIntOr(raw: number | string | undefined, fallback: number, propertyName: string): number {
+  if (raw === undefined || raw === null || raw === "") {
+    return fallback;
+  }
+  const parsed = typeof raw === "number" ? raw : Number(raw);
+  if (!Number.isFinite(parsed) || parsed < 1) {
+    throw new Error(`Invalid value for ${propertyName}: expected a positive integer, got ${JSON.stringify(raw)}.`);
+  }
+  return Math.floor(parsed);
 }
 
 async function deleteDeployment(
