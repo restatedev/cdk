@@ -117,6 +117,26 @@ describe("Restate constructs", () => {
     });
   });
 
+  test("ServiceDeployer with useCdkManagedLogGroup feature flag enabled", () => {
+    const app = new cdk.App({
+      context: { "@aws-cdk/aws-lambda:useCdkManagedLogGroup": true },
+    });
+    const stack = new cdk.Stack(app, "RestateCloudStack", {
+      env: { account: "account-id", region: "region" },
+    });
+
+    new ServiceDeployer(stack, "ServiceDeployer", {
+      code: lambda.Code.fromAsset("dist/register-service-handler"),
+    });
+
+    const template = app.synth().getStackByName("RestateCloudStack").template;
+    const logGroups = Object.values(template.Resources as Record<string, { Type: string }>).filter(
+      (r) => r.Type === "AWS::Logs::LogGroup",
+    );
+    // Only the CDK-managed LogGroup created by the Lambda construct; none added by ServiceDeployer
+    expect(logGroups).toHaveLength(1);
+  });
+
   test("Service Deployer overrides", () => {
     const app = new cdk.App();
     const stack = new cdk.Stack(app, "RestateCloudStack", {
