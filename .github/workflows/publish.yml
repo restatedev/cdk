@@ -20,13 +20,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "22.x"
+          node-version: "24"
           registry-url: "https://registry.npmjs.org"
 
-      # npm 11 breaks OIDC trusted publishing (ENEEDAUTH on empty NODE_AUTH_TOKEN).
-      # Pin to npm 10 via corepack until the regression is fixed upstream.
-      - run: corepack enable
-      - run: corepack install -g npm@10
       - run: npm ci
 
       # Release: update version BEFORE build so artifacts have correct version
@@ -75,16 +71,17 @@ jobs:
           if-no-files-found: error
 
       # Snapshot publish: use X.Y.Z-SNAPSHOT-timestamp with 'dev' tag
+      # OIDC trusted publishing (configured on npmjs.com) auto-adds a provenance
+      # statement; passing --provenance explicitly causes npm to short-circuit
+      # to ENEEDAUTH before the OIDC token exchange.
       - name: Publish snapshot
         if: github.event_name == 'push'
         run: |
           BASE_VERSION=$(node -p "require('./package.json').version.replace(/-SNAPSHOT$/, '')")
           npm version ${BASE_VERSION}-SNAPSHOT-$(date '+%Y%m%d%H%M%S') --git-tag-version false
           # We use dist-tag 'dev' for snapshots to avoid users accidentally installing them
-          npm publish --provenance --tag dev --access public
+          npm publish --tag dev --access public
         env:
-          # Clear the GITHUB_TOKEN that setup-node exports as NODE_AUTH_TOKEN; npm must
-          # see no token here so it falls through to OIDC trusted publishing exchange.
           NODE_AUTH_TOKEN: ""
 
       # Release publish: use 'next' tag for prereleases, 'latest' for stable
@@ -92,9 +89,9 @@ jobs:
         if: github.event_name == 'release'
         run: |
           if [[ ${{ github.event.release.prerelease }} == true ]]; then
-            npm publish --provenance --tag next --access public
+            npm publish --tag next --access public
           else
-            npm publish --provenance --tag latest --access public
+            npm publish --tag latest --access public
           fi
         env:
           NODE_AUTH_TOKEN: ""
