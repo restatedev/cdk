@@ -12,6 +12,7 @@
 import path from "node:path";
 import { Construct } from "constructs";
 import * as cdk from "aws-cdk-lib";
+import * as cx_api from "aws-cdk-lib/cx-api";
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as lambda_node from "aws-cdk-lib/aws-lambda-nodejs";
@@ -238,7 +239,10 @@ export class ServiceDeployer extends Construct {
       allowPublicSubnet: props?.allowPublicSubnet,
     });
 
-    if (!props?.logGroup) {
+    // Skip creating an explicit LogGroup when CDK manages it automatically via the
+    // useCdkManagedLogGroup feature flag - both would resolve to the same name and conflict.
+    const cdkManagedLogGroup = cdk.FeatureFlags.of(this).isEnabled(cx_api.USE_CDK_MANAGED_LAMBDA_LOGGROUP);
+    if (!props?.logGroup && !cdkManagedLogGroup) {
       // By default, Lambda Functions have a log group with never-expiring retention policy.
       new logs.LogGroup(this, "DeploymentLogs", {
         logGroupName: `/aws/lambda/${this.eventHandler.functionName}`,
