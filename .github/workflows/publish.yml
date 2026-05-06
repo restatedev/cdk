@@ -21,6 +21,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22.x"
+          registry-url: "https://registry.npmjs.org"
 
       # npm 11.5.1+ required for trusted publishing with OIDC. Use corepack rather than `npm install -g npm@latest`,
       # which fails on the Node 22 runner image due to a missing dependency in the bundled npm's global-install path.
