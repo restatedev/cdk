@@ -81,6 +81,10 @@ jobs:
           npm version ${BASE_VERSION}-SNAPSHOT-$(date '+%Y%m%d%H%M%S') --git-tag-version false
           # We use dist-tag 'dev' for snapshots to avoid users accidentally installing them
           npm publish --provenance --tag dev --access public
+        env:
+          # Clear the GITHUB_TOKEN that setup-node exports as NODE_AUTH_TOKEN; npm must
+          # see no token here so it falls through to OIDC trusted publishing exchange.
+          NODE_AUTH_TOKEN: ""
 
       # Release publish: use 'next' tag for prereleases, 'latest' for stable
       - name: Publish release
@@ -91,3 +95,5 @@ jobs:
           else
             npm publish --provenance --tag latest --access public
           fi
+        env:
+          NODE_AUTH_TOKEN: ""
