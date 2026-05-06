@@ -23,10 +23,10 @@ jobs:
           node-version: "22.x"
           registry-url: "https://registry.npmjs.org"
 
-      # npm 11.5.1+ required for trusted publishing with OIDC. Use corepack rather than `npm install -g npm@latest`,
-      # which fails on the Node 22 runner image due to a missing dependency in the bundled npm's global-install path.
+      # npm 11 breaks OIDC trusted publishing (ENEEDAUTH on empty NODE_AUTH_TOKEN).
+      # Pin to npm 10 via corepack until the regression is fixed upstream.
       - run: corepack enable
-      - run: corepack install -g npm@latest
+      - run: corepack install -g npm@10
       - run: npm ci
 
       # Release: update version BEFORE build so artifacts have correct version
