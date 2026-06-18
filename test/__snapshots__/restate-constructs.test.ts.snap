@@ -1285,10 +1285,10 @@ exports[`Restate constructs Deploy a Lambda service handler to Restate Cloud env
         'Fn::GetAtt':
           - RestateServiceHandlerServiceRole07B26D05
           - Arn
-      Runtime: nodejs22.x
+      Runtime: nodejs24.x
     DependsOn:
       - RestateServiceHandlerServiceRole07B26D05
-  RestateServiceHandlerCurrentVersion40030E674d150b78008a2f2be732db1598a1a845:
+  RestateServiceHandlerCurrentVersion40030E67133906c8c3e64312a477006cbb83133d:
     Type: 'AWS::Lambda::Version'
     Properties:
       FunctionName:
@@ -1311,7 +1311,7 @@ exports[`Restate constructs Deploy a Lambda service handler to Restate Cloud env
             - ':secretsmanager:region:account-id:secret:secret_name'
       serviceLambdaArn:
         Ref: >-
-          RestateServiceHandlerCurrentVersion40030E674d150b78008a2f2be732db1598a1a845
+          RestateServiceHandlerCurrentVersion40030E67133906c8c3e64312a477006cbb83133d
       invokeRoleArn:
         'Fn::GetAtt':
           - RestateInvokerRole42565598
@@ -1487,10 +1487,10 @@ exports[`Restate constructs Deploy a Lambda service handler to existing Restate 
         'Fn::GetAtt':
           - RestateServiceHandlerServiceRole07B26D05
           - Arn
-      Runtime: nodejs22.x
+      Runtime: nodejs24.x
     DependsOn:
       - RestateServiceHandlerServiceRole07B26D05
-  RestateServiceHandlerCurrentVersion40030E674d150b78008a2f2be732db1598a1a845:
+  RestateServiceHandlerCurrentVersion40030E67133906c8c3e64312a477006cbb83133d:
     Type: 'AWS::Lambda::Version'
     Properties:
       FunctionName:
@@ -1509,7 +1509,7 @@ exports[`Restate constructs Deploy a Lambda service handler to existing Restate 
         Ref: RestateApiKey6463672F
       serviceLambdaArn:
         Ref: >-
-          RestateServiceHandlerCurrentVersion40030E674d150b78008a2f2be732db1598a1a845
+          RestateServiceHandlerCurrentVersion40030E67133906c8c3e64312a477006cbb83133d
       invokeRoleArn:
         'Fn::GetAtt':
           - InvokerRole4DB2757E
@@ -1698,10 +1698,10 @@ exports[`Restate constructs Restate Cloud Environment construct with role refere
         'Fn::GetAtt':
           - RestateServiceHandlerServiceRole07B26D05
           - Arn
-      Runtime: nodejs22.x
+      Runtime: nodejs24.x
     DependsOn:
       - RestateServiceHandlerServiceRole07B26D05
-  RestateServiceHandlerCurrentVersion40030E674d150b78008a2f2be732db1598a1a845:
+  RestateServiceHandlerCurrentVersion40030E67133906c8c3e64312a477006cbb83133d:
     Type: 'AWS::Lambda::Version'
     Properties:
       FunctionName:
@@ -1724,7 +1724,7 @@ exports[`Restate constructs Restate Cloud Environment construct with role refere
             - ':secretsmanager:region:account-id:secret:secret_name'
       serviceLambdaArn:
         Ref: >-
-          RestateServiceHandlerCurrentVersion40030E674d150b78008a2f2be732db1598a1a845
+          RestateServiceHandlerCurrentVersion40030E67133906c8c3e64312a477006cbb83133d
       invokeRoleArn: 'arn:aws:iam::654654156625:role/Invoker'
       removalPolicy: retain
       private: 'false'
@@ -1919,10 +1919,10 @@ exports[`Restate constructs Service Deployer with removal policy and pruning opt
         'Fn::GetAtt':
           - RestateServiceHandlerServiceRole07B26D05
           - Arn
-      Runtime: nodejs22.x
+      Runtime: nodejs24.x
     DependsOn:
       - RestateServiceHandlerServiceRole07B26D05
-  RestateServiceHandlerCurrentVersion40030E674d150b78008a2f2be732db1598a1a845:
+  RestateServiceHandlerCurrentVersion40030E67133906c8c3e64312a477006cbb83133d:
     Type: 'AWS::Lambda::Version'
     Properties:
       FunctionName:
@@ -1939,7 +1939,7 @@ exports[`Restate constructs Service Deployer with removal policy and pruning opt
       adminUrl: 'https://restate.example.com:9070'
       serviceLambdaArn:
         Ref: >-
-          RestateServiceHandlerCurrentVersion40030E674d150b78008a2f2be732db1598a1a845
+          RestateServiceHandlerCurrentVersion40030E67133906c8c3e64312a477006cbb83133d
       invokeRoleArn:
         'Fn::GetAtt':
           - InvokerRole4DB2757E
