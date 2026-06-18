@@ -101,6 +101,9 @@ export interface RestateFargateProps {
  * Creates a Restate service deployment running as a Fargate task and backed by EFS.
  *
  * Please note that this construct is still experimental! Use with caution.
+ *
+ * @deprecated This construct will be removed in a future release. To run Restate on Kubernetes, use the Restate Helm
+ * chart or the restate-operator instead.
  */
 export class FargateRestateDeployment extends Construct implements IRestateEnvironment {
   readonly invokerRole: iam.IRole;
