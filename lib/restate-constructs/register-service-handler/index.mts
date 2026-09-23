@@ -40,6 +40,20 @@ export interface RegistrationProperties {
    */
   authTokenSecretArn?: string;
 
+  /**
+   * When set, treat the secret value as a JSON object and extract the bearer token from this top-level field instead
+   * of using the raw secret string. Extraction happens here in the handler so the plaintext token is never exposed as
+   * a custom-resource property.
+   */
+  authTokenJsonField?: string;
+
+  /**
+   * Static headers to add to every admin API request. These take precedence over headers the handler sets itself
+   * (`Authorization`, `Content-Type`, `Accept`), so a caller can override them when a proxy or gateway in front of the
+   * admin endpoint requires it. Use standard header casing to override a handler-set header.
+   */
+  additionalHeaders?: Record<string, string>;
+
   /** Not used by the handler, purely used to trick CloudFormation to perform an update when it otherwise would not. */
   configurationVersion?: string;
 
@@ -197,10 +211,13 @@ export const handler = async function (event: CloudFormationCustomResourceEvent,
 
     let authHeader: Record<string, string> = {};
     try {
-      authHeader = await createAuthHeader(props);
+      authHeader = await buildBaseHeaders(props);
     } catch (e) {
       console.warn(`Failed to load auth token for deletion: ${(e as Error)?.message}`);
-      console.warn("Proceeding with deletion without auth header.");
+      // Static headers don't depend on the secret, so keep them: a proxy in front of the admin
+      // endpoint may reject the request without them, leaving the deployment registered.
+      authHeader = props.additionalHeaders ?? {};
+      console.warn("Proceeding with deletion without the Authorization header.");
     }
 
     console.log(`Removal policy is 'destroy'; finding deployment for ${props.serviceLambdaArn}`);
@@ -234,7 +251,7 @@ export const handler = async function (event: CloudFormationCustomResourceEvent,
     return;
   }
 
-  const authHeader = await createAuthHeader(props);
+  const authHeader = await buildBaseHeaders(props);
 
   let attempt;
 
@@ -406,9 +423,11 @@ export const handler = async function (event: CloudFormationCustomResourceEvent,
   throw new Error(failureReason ?? "Restate service registration failed. Please see logs for details.");
 };
 
-async function createAuthHeader(props: RegistrationProperties): Promise<Record<string, string>> {
+async function buildBaseHeaders(props: RegistrationProperties): Promise<Record<string, string>> {
+  const additionalHeaders = props.additionalHeaders ?? {};
+
   if (!props.authTokenSecretArn) {
-    return {};
+    return { ...additionalHeaders };
   }
 
   console.log(`Using bearer authentication token from secret ${props.authTokenSecretArn}`);
@@ -420,8 +439,29 @@ async function createAuthHeader(props: RegistrationProperties): Promise<Record<s
   );
 
   console.log(`Successfully retrieved secret "${response.Name}" version ${response.VersionId}`);
+
+  let token = response.SecretString;
+  if (props.authTokenJsonField) {
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = JSON.parse(response.SecretString ?? "");
+    } catch {
+      // Deliberately avoid echoing the secret material in the error.
+      throw new Error(`Secret value is not valid JSON; cannot extract field "${props.authTokenJsonField}".`);
+    }
+    const field = parsed?.[props.authTokenJsonField];
+    if (typeof field !== "string" || field.length === 0) {
+      throw new Error(
+        `Secret JSON field "${props.authTokenJsonField}" is missing, empty, or not a string; cannot use it as a bearer token.`,
+      );
+    }
+    token = field;
+  }
+
+  // Spread additionalHeaders last so a caller can override the Authorization header if they need to.
   return {
-    Authorization: `Bearer ${response.SecretString}`,
+    Authorization: `Bearer ${token}`,
+    ...additionalHeaders,
   };
 }
 

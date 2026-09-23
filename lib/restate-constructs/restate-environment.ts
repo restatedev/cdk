@@ -35,6 +35,11 @@ export interface IRestateEnvironment {
    * Authentication token to include as a bearer token in requests to the admin endpoint.
    */
   readonly authToken?: secrets.ISecret;
+
+  /**
+   * When {@link authToken} stores a JSON object, extract the bearer token from this top-level field.
+   */
+  readonly authTokenJsonField?: string;
 }
 
 /**
@@ -45,12 +50,14 @@ export interface IRestateEnvironment {
 export class RestateEnvironment implements IRestateEnvironment {
   readonly adminUrl: string;
   readonly authToken?: secrets.ISecret;
+  readonly authTokenJsonField?: string;
   readonly invokerRole?: iam.IRole;
 
   private constructor(props: IRestateEnvironment) {
     this.adminUrl = props.adminUrl;
     this.invokerRole = props.invokerRole;
     this.authToken = props.authToken;
+    this.authTokenJsonField = props.authTokenJsonField;
   }
 
   static fromAttributes(props: IRestateEnvironment): IRestateEnvironment {

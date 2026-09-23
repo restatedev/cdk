@@ -303,6 +303,77 @@ describe("Restate constructs", () => {
     expect("healthCheckMaxBackoffSeconds" in customResource).toBe(false);
   });
 
+  test("Service Deployer forwards authTokenJsonField and additionalHeaders to the custom resource", () => {
+    const app = new cdk.App();
+    const stack = new cdk.Stack(app, "ServiceDeployerAuthOptions", {
+      env: { account: "account-id", region: "region" },
+    });
+
+    const authToken = new secrets.Secret(stack, "RestateApiKey", {
+      secretStringValue: cdk.SecretValue.unsafePlainText('{"token":"rst_xxx"}'),
+    });
+
+    const restateEnvironment = RestateEnvironment.fromAttributes({
+      adminUrl: "https://restate.example.com:9070",
+      authToken,
+      authTokenJsonField: "token",
+    });
+
+    const handler = mockHandler(stack);
+    const serviceDeployer = new ServiceDeployer(stack, "ServiceDeployer", {
+      code: lambda.Code.fromAsset("dist/register-service-handler"),
+    });
+    serviceDeployer.register(handler.currentVersion, restateEnvironment, {
+      additionalHeaders: { "X-Deploy-Source": "cdk", "X-Env": "staging" },
+    });
+
+    const properties = Template.fromStack(stack).findResources("Custom::RestateServiceDeployment");
+    const customResource = Object.values(properties)[0]!.Properties as Record<string, unknown>;
+    expect(customResource.authTokenJsonField).toBe("token");
+    expect(customResource.additionalHeaders).toEqual({ "X-Deploy-Source": "cdk", "X-Env": "staging" });
+  });
+
+  test("Service Deployer omits auth options when not set", () => {
+    const app = new cdk.App();
+    const stack = new cdk.Stack(app, "ServiceDeployerAuthDefaults", {
+      env: { account: "account-id", region: "region" },
+    });
+
+    const restateEnvironment = RestateEnvironment.fromAttributes({
+      adminUrl: "https://restate.example.com:9070",
+    });
+
+    const handler = mockHandler(stack);
+    const serviceDeployer = new ServiceDeployer(stack, "ServiceDeployer", {
+      code: lambda.Code.fromAsset("dist/register-service-handler"),
+    });
+    serviceDeployer.register(handler.currentVersion, restateEnvironment);
+
+    const properties = Template.fromStack(stack).findResources("Custom::RestateServiceDeployment");
+    const customResource = Object.values(properties)[0]!.Properties as Record<string, unknown>;
+    expect("authTokenJsonField" in customResource).toBe(false);
+    expect("additionalHeaders" in customResource).toBe(false);
+  });
+
+  test("Service Deployer rejects authTokenJsonField without an auth token", () => {
+    const app = new cdk.App();
+    const stack = new cdk.Stack(app, "ServiceDeployerInvalidAuthOptions", {
+      env: { account: "account-id", region: "region" },
+    });
+    const restateEnvironment = RestateEnvironment.fromAttributes({
+      adminUrl: "https://restate.example.com:9070",
+      authTokenJsonField: "token",
+    });
+    const handler = mockHandler(stack);
+    const serviceDeployer = new ServiceDeployer(stack, "ServiceDeployer", {
+      code: lambda.Code.fromAsset("dist/register-service-handler"),
+    });
+
+    expect(() => serviceDeployer.register(handler.currentVersion, restateEnvironment)).toThrow(
+      "authTokenJsonField requires an authToken",
+    );
+  });
+
   test("[Experimental] Create a self-hosted Restate environment deployed on ECS Fargate", () => {
     const app = new cdk.App();
     const stack = new cdk.Stack(app, "RestateOnFargateStack", {
