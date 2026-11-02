@@ -17,8 +17,8 @@ jobs:
       id-token: write # required for npm trusted publishing via OIDC
 
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v4.4.0
+      - uses: actions/setup-node@v4.4.0
         with:
           node-version: "24"
           registry-url: "https://registry.npmjs.org"
@@ -63,7 +63,7 @@ jobs:
         run: mv $(npm pack) restatedev-restate-cdk.tgz
       - name: Upload snapshot artifact
         if: github.event_name == 'push'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v4.6.2
         with:
           name: restatedev-restate-cdk
           path: restatedev-restate-cdk.tgz
