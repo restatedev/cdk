@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023-2025 - Restate Software, Inc., Restate GmbH
+ * Copyright (c) 2023-2026 - Restate Software, Inc., Restate GmbH
  *
  * This file is part of the Restate CDK Construct Library,
  * which is released under the MIT license.
