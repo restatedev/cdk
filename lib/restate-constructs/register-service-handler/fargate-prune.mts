@@ -30,6 +30,7 @@ import {
   ApplicationAutoScalingClient,
   DeregisterScalableTargetCommand,
   DescribeScalableTargetsCommand,
+  DescribeScalingPoliciesCommand,
   PutScalingPolicyCommand,
   RegisterScalableTargetCommand,
 } from "@aws-sdk/client-application-auto-scaling";
@@ -54,6 +55,9 @@ import {
 } from "./fargate-shared.mjs";
 
 const MIN_REMAINING_MS = 60_000;
+// Removing a registered version makes up to three 30-second Restate requests, then several AWS calls; starting one with
+// less time left could kill the Lambda before it answers CloudFormation.
+const REMOVAL_REMAINING_MS = 150_000;
 const TARGET_GROUP_TAG_BATCH_SIZE = 20;
 
 interface AdminContext {
@@ -103,6 +107,20 @@ async function runPrune(
   if (belowBudget(context)) return;
   const resources = await findResources(ecs, elbv2, config);
   const stackMembership = await describeStackMembership(cloudFormation, resources, options?.currentServiceArn);
+  if (belowBudget(context)) return;
+  // A release can promote any version a stack holds (a rollback, or a revert to earlier code), so their Restate
+  // deployments are never removed, even through a stale copy outside the stack.
+  const versionsInStacks = new Set(
+    resources.services
+      .filter(
+        (service) =>
+          service.serviceArn !== undefined &&
+          (service.serviceArn === options?.currentServiceArn ||
+            stackMembership.services.get(service.serviceArn) === true),
+      )
+      .map((service) => tagValue(service.tags, TAG.version))
+      .filter((version): version is string => version !== undefined),
+  );
   const drainDelayMs = parseNumber(config.drainDelaySeconds, "drainDelaySeconds") * 1_000;
 
   let admin: AdminContext;
@@ -135,6 +153,14 @@ async function runPrune(
       continue;
     }
 
+    const version = tagValue(service.tags, TAG.version);
+    if (version !== undefined && versionsInStacks.has(version)) {
+      console.log(
+        `Skipping ECS service ${service.serviceArn}: version ${version} is in a stack; the release retires it.`,
+      );
+      continue;
+    }
+
     let deploymentId = tagValue(service.tags, TAG.deploymentId);
     if (deploymentId === undefined) {
       const versionTag = tagValue(service.tags, TAG.version);
@@ -158,7 +184,17 @@ async function runPrune(
     }
 
     if (!state.deployments.has(deploymentId)) {
-      console.log(`Removing ECS service ${service.serviceArn}: Restate no longer knows deployment ${deploymentId}.`);
+      // Only a removal this handler started (drained-at is set) deletes the Restate deployment before the resources.
+      // Otherwise the deployment was deleted elsewhere, or the construct now points at another Restate cluster that
+      // never knew it, and its invocations may still need this version.
+      if (tagValue(service.tags, TAG.drainedAt) === undefined) {
+        console.warn(
+          `Keeping ECS service ${service.serviceArn}: Restate does not know its deployment ${deploymentId}. ` +
+            "Remove it by hand once nothing needs it.",
+        );
+        continue;
+      }
+      console.log(`Finishing removal of ECS service ${service.serviceArn}: deployment ${deploymentId} is gone.`);
       addAll(removedTargetGroups, await removeVersion(ecs, elbv2, autoScaling, config, service, undefined, admin));
       continue;
     }
@@ -204,6 +240,7 @@ async function runPrune(
     }
 
     if (Date.now() - drainedSince >= drainDelayMs) {
+      if (belowBudget(context, REMOVAL_REMAINING_MS)) return;
       console.log(
         `Removing drained ECS service ${service.serviceArn} (deployment ${deploymentId}, drained at ${drainedAt}).`,
       );
@@ -213,7 +250,8 @@ async function runPrune(
     }
   }
 
-  await removeOrphanedDeployments(config, admin, state, serviceDeploymentIds, context, true, true);
+  const endpointsInStacks = new Set([...versionsInStacks].map((version) => `${config.endpointPrefix}${version}`));
+  await removeOrphanedDeployments(config, admin, state, serviceDeploymentIds, context, true, true, endpointsInStacks);
   await sweepTargetGroups(
     cloudFormation,
     elbv2,
@@ -475,24 +513,30 @@ async function demoteIfNeeded(
   config: FargatePruneConfig,
 ): Promise<void> {
   if (service.serviceArn === undefined) return;
-  if (tagValue(service.tags, TAG.originalCapacity) !== undefined) return;
-
   const { resourceId } = scalableTarget(service);
-  const target = await describeScalableTarget(autoScaling, resourceId);
-  const originalCapacity = target
-    ? `${parseNumber(target.MinCapacity ?? service.desiredCount ?? 0, "scalable target MinCapacity")}:${parseNumber(
-        target.MaxCapacity ?? service.desiredCount ?? 0,
-        "scalable target MaxCapacity",
-      )}`
-    : `none:${service.desiredCount ?? 0}`;
 
-  console.log(`Recording original capacity ${originalCapacity} on ECS service ${service.serviceArn}.`);
-  await ecs.send(
-    new TagResourceCommand({
-      resourceArn: service.serviceArn,
-      tags: [{ key: TAG.originalCapacity, value: originalCapacity }],
-    }),
-  );
+  // The tag is written first, so a demotion that failed halfway is finished by the next run. The policy marks a
+  // completed demotion; capacity changed by hand after that is left alone.
+  if (tagValue(service.tags, TAG.originalCapacity) !== undefined) {
+    if (await hasSupersededPolicy(autoScaling, resourceId)) return;
+    console.log(`Finishing the demotion of ECS service ${service.serviceArn}.`);
+  } else {
+    const target = await describeScalableTarget(autoScaling, resourceId);
+    const originalCapacity = target
+      ? `${parseNumber(target.MinCapacity ?? service.desiredCount ?? 0, "scalable target MinCapacity")}:${parseNumber(
+          target.MaxCapacity ?? service.desiredCount ?? 0,
+          "scalable target MaxCapacity",
+        )}`
+      : `none:${service.desiredCount ?? 0}`;
+
+    console.log(`Recording original capacity ${originalCapacity} on ECS service ${service.serviceArn}.`);
+    await ecs.send(
+      new TagResourceCommand({
+        resourceArn: service.serviceArn,
+        tags: [{ key: TAG.originalCapacity, value: originalCapacity }],
+      }),
+    );
+  }
 
   const minCapacity = parseNumber(config.supersededScaling.minCapacity, "supersededScaling.minCapacity");
   const maxCapacity = parseNumber(config.supersededScaling.maxCapacity, "supersededScaling.maxCapacity");
@@ -544,6 +588,18 @@ async function demoteIfNeeded(
       },
     }),
   );
+}
+
+async function hasSupersededPolicy(autoScaling: ApplicationAutoScalingClient, resourceId: string): Promise<boolean> {
+  const response = await autoScaling.send(
+    new DescribeScalingPoliciesCommand({
+      ServiceNamespace: "ecs",
+      ResourceId: resourceId,
+      ScalableDimension: SCALABLE_DIMENSION,
+      PolicyNames: [SUPERSEDED_SCALING_POLICY_NAME],
+    }),
+  );
+  return (response.ScalingPolicies ?? []).length > 0;
 }
 
 async function describeScalableTarget(autoScaling: ApplicationAutoScalingClient, resourceId: string) {
@@ -717,9 +773,11 @@ async function removeOrphanedDeployments(
   context: Context,
   respectPinned: boolean,
   respectBudget: boolean,
+  keepEndpoints: Set<string> = new Set(),
 ): Promise<void> {
   for (const [deploymentId, endpoint] of state.deployments) {
     if (!endpoint.startsWith(config.endpointPrefix)) continue;
+    if (keepEndpoints.has(stripOneTrailingSlash(endpoint))) continue;
     if (state.latestDeploymentIds.has(deploymentId)) continue;
     if (serviceDeploymentIds.has(deploymentId)) continue;
 
@@ -803,8 +861,8 @@ function addAll(target: Set<string>, values: Set<string>): void {
   for (const value of values) target.add(value);
 }
 
-function belowBudget(context: Context): boolean {
-  if (context.getRemainingTimeInMillis() < MIN_REMAINING_MS) {
+function belowBudget(context: Context, minimumMs: number = MIN_REMAINING_MS): boolean {
+  if (context.getRemainingTimeInMillis() < minimumMs) {
     console.log(`Stopping prune: only ${context.getRemainingTimeInMillis()} ms remain in the Lambda invocation.`);
     return true;
   }

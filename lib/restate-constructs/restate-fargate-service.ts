@@ -321,21 +321,8 @@ export class RestateFargateService extends Construct implements ec2.IConnectable
 
   private versionId(): string {
     if (this.computedVersionId === undefined) {
-      const stack = cdk.Stack.of(this);
-      const taskDefinition = this.props.taskDefinition.node.defaultChild as cdk.CfnResource;
-      // The same approach as lambda.Function.currentVersion: hash the resolved CloudFormation properties.
-      const rendered = stack.resolve((taskDefinition as any)._toCloudFormation());
-      const properties = Object.values(
-        rendered.Resources as Record<string, { Properties?: Record<string, unknown> }>,
-      )[0]?.Properties;
-      const versioned = Object.fromEntries(
-        VERSIONED_TASK_DEFINITION_PROPERTIES.filter((key) => properties?.[key] !== undefined).map((key) => [
-          key,
-          properties![key],
-        ]),
-      );
       const input = canonicalJson({
-        taskDefinition: versioned,
+        taskDefinition: this.versionedTaskDefinitionProperties(),
         containerName: this.containerName,
         containerPort: this.containerPort,
         pathPrefix: this.pathPrefix,
@@ -464,6 +451,21 @@ export class RestateFargateService extends Construct implements ec2.IConnectable
     );
   }
 
+  /** The same approach as lambda.Function.currentVersion: the resolved CloudFormation properties that define a version. */
+  private versionedTaskDefinitionProperties(): Record<string, unknown> {
+    const stack = cdk.Stack.of(this);
+    const taskDefinition = this.props.taskDefinition.node.defaultChild as cdk.CfnResource;
+    const rendered = stack.resolve((taskDefinition as any)._toCloudFormation());
+    const properties = Object.values(rendered.Resources as Record<string, { Properties?: Record<string, unknown> }>)[0]
+      ?.Properties;
+    return Object.fromEntries(
+      VERSIONED_TASK_DEFINITION_PROPERTIES.filter((key) => properties?.[key] !== undefined).map((key) => [
+        key,
+        properties![key],
+      ]),
+    );
+  }
+
   private validateImages(): string[] {
     const stack = cdk.Stack.of(this);
     return this.props.taskDefinition.node
@@ -495,7 +497,6 @@ export class RestateFargateService extends Construct implements ec2.IConnectable
         .filter((node): node is cdk.CfnParameter => node instanceof cdk.CfnParameter)
         .map((parameter) => stack.resolve(parameter.logicalId) as string),
     );
-    const taskDefinition = this.props.taskDefinition.node.defaultChild as ecs.CfnTaskDefinition;
     const found = new Set<string>();
     const walk = (value: unknown): void => {
       if (typeof value === "string") {
@@ -510,7 +511,7 @@ export class RestateFargateService extends Construct implements ec2.IConnectable
         }
       }
     };
-    walk(stack.resolve(taskDefinition.containerDefinitions));
+    walk(this.versionedTaskDefinitionProperties());
     return [...found].map(
       (input) =>
         `The task definition reads ${input}, which can change at deploy time without changing the version. ` +

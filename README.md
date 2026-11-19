@@ -154,15 +154,25 @@ already started on the new version finish there, and it is then pruned like any 
 | `registration`                       |                                    | Restate registration options: `private`, `breaking`, `additionalHeaders`, `authToken`, `adminUrl`, `insecure` and the health check retry settings          |
 | `registerAfterAllResources`          | `true`                             | Registers a new version only after every other resource in the stack; turn off if your own resources must depend on the construct                          |
 
-Use `invalidateVersionBasedOn("...")` to force a new version when the task definition is unchanged.
+Use `invalidateVersionBasedOn("...")` to force a new version when the task definition is unchanged. A reference to
+another resource, such as a bucket name in an environment variable, is hashed as the reference itself. If that resource
+is replaced, the current version picks up the new value in place; call `invalidateVersionBasedOn` in the same change to
+get a new version instead.
+
+The first release of the construct can take over services that an endpoint outside the construct serves today, for
+example a single Fargate service you are migrating from: registering a new URI makes it the latest deployment. Only the
+promotion after a rollback (with `force`) refuses to take a service from an endpoint the construct does not own.
 
 ### Operating it
 
 - **Finding versions.** Every version's resources carry the tags `restate:service` and `restate:version`. Superseded
   versions also carry `restate:deployment-id`, `restate:original-capacity` and, once drained, `restate:drained-at`.
 - **Changing a superseded version's capacity by hand.** The construct sets a superseded version's scaling once, when it
-  first sees it. Capacity changes you make afterwards, for example with `aws application-autoscaling
-register-scalable-target`, are left alone.
+  first sees it, and adds the scaling policy `restate-superseded-cpu`. Capacity changes you make afterwards, for example
+  with `aws application-autoscaling register-scalable-target`, are left alone as long as that policy stays.
+- **Changing the Restate environment.** Pointing the construct at another Restate cluster does not move invocations.
+  Versions whose deployments the new cluster does not know are kept and logged as warnings; remove them by hand once
+  the old cluster no longer needs them.
 - **Removing a version by hand.** Delete its deployment in Restate first, then its listener rule, ECS service and
   target group.
 - **Troubleshooting.**

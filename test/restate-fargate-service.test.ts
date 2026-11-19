@@ -349,6 +349,11 @@ describe("RestateFargateService", () => {
 
     const imported = fixture({ containerEnvironmentValue: () => cdk.Fn.importValue("x") });
     expect(() => Template.fromStack(imported.stack)).toThrow(/import "x"/);
+
+    // Every versioned property is checked, not only the container definitions.
+    const volume = fixture();
+    volume.taskDefinition.addVolume({ name: cdk.Fn.importValue("volume-name") });
+    expect(() => Template.fromStack(volume.stack)).toThrow(/import "volume-name"/);
   });
 
   test("registers after all resources by default", () => {

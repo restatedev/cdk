@@ -1851,7 +1851,7 @@ exports[`Restate constructs Service Deployer overrides 1`] = `
         - arm64
       Code:
         S3Bucket: cdk-hnb659fds-assets-account-id-region
-        S3Key: 04c4ab58fcc5164ff70c1bd3a12a3b84900e6dd4f01ccf3ecd29c1ce18d92fb8.zip
+        S3Key: 22230f890ead9ce2221b208af33f47e87e01baea8dc29aaf785516c81043a20e.zip
       Description: Restate custom registration handler
       Handler: entrypoint.handler
       MemorySize: 128
