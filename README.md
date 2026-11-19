@@ -123,6 +123,24 @@ A complete, deployable stack with a self-hosted Restate node is in
 | Container images from CDK assets or pinned by digest; no CloudFormation parameters, imports or `{{resolve:...}}` references in the task definition                                                                   | Each of these can change what runs without a new version. Synthesis fails otherwise                                                                                                                                                    |
 | The `ServiceDeployer` Lambda can reach the Restate admin API and these AWS APIs: S3, ECS, Elastic Load Balancing, Application Auto Scaling, CloudFormation, CloudWatch, and Secrets Manager if you use an auth token | In a VPC without internet access, each needs a VPC endpoint. Without them, releases fail with `ETIMEDOUT`                                                                                                                              |
 
+### Permissions
+
+The construct adds these permissions to the `ServiceDeployer` Lambda's role. The Lambda uses them to register
+versions, allocate listener rule priorities, and scale down and remove superseded versions.
+
+| Actions                                                                                                                                                                                                                                                                                                                               | Resources                                                                 |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| `ecs:DescribeServices`, `ecs:ListServices`, `elasticloadbalancing:DescribeRules`, `elasticloadbalancing:DescribeTargetGroups`, `elasticloadbalancing:DescribeTags`, `application-autoscaling:DescribeScalableTargets`, `application-autoscaling:DescribeScalingPolicies`, `cloudformation:DescribeStackResources`, `tag:GetResources` | `*` (read only)                                                           |
+| `ecs:UpdateService`, `ecs:DeleteService`, `ecs:TagResource`, `ecs:UntagResource`, `elasticloadbalancing:DeleteTargetGroup`                                                                                                                                                                                                            | Resources tagged `restate:service` with this construct's value            |
+| `elasticloadbalancing:DeleteRule`                                                                                                                                                                                                                                                                                                     | Rules of the given listener                                               |
+| `application-autoscaling:RegisterScalableTarget`, `DeregisterScalableTarget`, `PutScalingPolicy`, `DeleteScalingPolicy`, `cloudwatch:DescribeAlarms`                                                                                                                                                                                  | `*`: Application Auto Scaling cannot be limited by the ECS service's tags |
+| `cloudwatch:PutMetricAlarm`, `cloudwatch:DeleteAlarms`                                                                                                                                                                                                                                                                                | The target tracking alarms of services in this cluster                    |
+| `iam:CreateServiceLinkedRole`                                                                                                                                                                                                                                                                                                         | Only the `ecs.application-autoscaling.amazonaws.com` service-linked role  |
+
+If you give the `ServiceDeployer` a `role` that CDK cannot change (for example one imported with `mutable: false`), or
+a permissions boundary or SCP limits it, grant these yourself. A release that lacks them fails. A prune that lacks them
+only logs the error in the Lambda's log group, and superseded versions keep running.
+
 ### What a deployment does
 
 1. CloudFormation creates the new version's ECS service, target group and listener rule, and waits for its tasks to
