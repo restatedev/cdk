@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023-2025 - Restate Software, Inc., Restate GmbH
+ * Copyright (c) 2023-2026 - Restate Software, Inc., Restate GmbH
  *
  * This file is part of the Restate CDK Construct Library,
  * which is released under the MIT license.
@@ -17,3 +17,4 @@ $.verbose = true;
 
 cd(path.dirname(fileURLToPath(import.meta.url)));
 await $`npx esbuild --bundle --platform=node handler.js --outfile=dist/bundle.js`;
+await $`npx esbuild --bundle --platform=node fargate.js --outfile=dist/fargate.js`;

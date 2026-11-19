@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023-2025 - Restate Software, Inc., Restate GmbH
+ * Copyright (c) 2023-2026 - Restate Software, Inc., Restate GmbH
  *
  * This file is part of the Restate CDK Construct Library,
  * which is released under the MIT license.
@@ -15,3 +15,4 @@ export * from "./restate-environment";
 export * from "./restate-cloud-environment";
 export * from "./deployments-common";
 export * from "./single-node-restate-deployment";
+export * from "./restate-fargate-service";

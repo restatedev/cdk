@@ -6,6 +6,8 @@ import * as https from "https";
 import * as url from "url";
 
 import { handler as indexHandler } from "./index.mjs";
+import type { FargatePruneEvent } from "./fargate-contract.mjs";
+import { prune } from "./fargate-prune.mjs";
 
 // for unit tests
 export const external = {
@@ -32,6 +34,12 @@ export type HandlerResponse =
     };
 
 export async function handler(event: AWSLambda.CloudFormationCustomResourceEvent, context: AWSLambda.Context) {
+  const pruneEvent = event as unknown as Partial<FargatePruneEvent>;
+  if (pruneEvent.restateFargatePrune !== undefined) {
+    await prune(pruneEvent.restateFargatePrune, context);
+    return;
+  }
+
   const sanitizedEvent = { ...event, ResponseURL: "..." };
   external.log(JSON.stringify(sanitizedEvent, undefined, 2));
 
