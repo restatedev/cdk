@@ -15,3 +15,4 @@ export * from "./restate-environment";
 export * from "./restate-cloud-environment";
 export * from "./deployments-common";
 export * from "./single-node-restate-deployment";
+export * from "./restate-fargate-service";

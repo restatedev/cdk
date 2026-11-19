@@ -23,6 +23,19 @@ import type { RegistrationProperties } from "./register-service-handler/index.mt
 
 const DEFAULT_TIMEOUT = cdk.Duration.seconds(300);
 
+/** What a registration points Restate at: a Lambda version, or an HTTP endpoint with the scope its resource lives in. */
+type RegistrationTarget =
+  | { lambda: lambda.IVersion }
+  | {
+      http: {
+        scope: Construct;
+        id: string;
+        uri: string;
+        ownedEndpointPrefix: string;
+        extraProperties: Record<string, unknown>;
+      };
+    };
+
 export interface ServiceRegistrationProps {
   /**
    * Secrets Manager secret ARN for the authentication token to use when calling the admin API. Takes precedence
@@ -277,7 +290,31 @@ export class ServiceDeployer extends Construct {
    * @see {ServiceRegistrationProps}
    */
   register(handler: lambda.IVersion, environment: IRestateEnvironment, options?: ServiceRegistrationProps) {
-    this.registerServiceInternal(undefined, handler, environment, options);
+    this.registerServiceInternal(undefined, { lambda: handler }, environment, options);
+  }
+
+  /**
+   * Register an HTTP deployment at `uri` and make it the latest deployment of every service it exposes, promoting an
+   * already-registered deployment at that URI back to latest if a newer one holds it (a rollback). Latest is only taken
+   * over from deployments whose URI starts with `ownedEndpointPrefix`.
+   *
+   * @internal Used by {@link RestateFargateService}; the custom resource is created in `scope` under `id`.
+   */
+  _registerHttpEndpoint(
+    scope: Construct,
+    id: string,
+    uri: string,
+    ownedEndpointPrefix: string,
+    environment: IRestateEnvironment,
+    options: ServiceRegistrationProps | undefined,
+    extraProperties: Record<string, unknown>,
+  ): cdk.CustomResource {
+    return this.registerServiceInternal(
+      undefined,
+      { http: { scope, id, uri, ownedEndpointPrefix, extraProperties } },
+      environment,
+      options,
+    );
   }
 
   /**
@@ -301,15 +338,15 @@ export class ServiceDeployer extends Construct {
     environment: IRestateEnvironment,
     options?: ServiceRegistrationProps,
   ) {
-    this.registerServiceInternal(serviceName, handler, environment, options);
+    this.registerServiceInternal(serviceName, { lambda: handler }, environment, options);
   }
 
   private registerServiceInternal(
     serviceName: string | undefined,
-    handler: lambda.IVersion,
+    target: RegistrationTarget,
     environment: IRestateEnvironment,
     options?: ServiceRegistrationProps,
-  ) {
+  ): cdk.CustomResource {
     if (environment.authTokenJsonField !== undefined && !environment.authToken) {
       throw new Error("authTokenJsonField requires an authToken on the target environment.");
     }
@@ -321,40 +358,48 @@ export class ServiceDeployer extends Construct {
 
     const invokerRole = options?.invokerRole ?? environment.invokerRole;
 
-    const deployment = new cdk.CustomResource(handler, "RestateServiceDeployment", {
+    const handler = "lambda" in target ? target.lambda : undefined;
+    const http = "http" in target ? target.http : undefined;
+
+    const deployment = new cdk.CustomResource(http?.scope ?? handler!, http?.id ?? "RestateServiceDeployment", {
       serviceToken: this.eventHandler.functionArn,
-      resourceType: "Custom::RestateServiceDeployment",
+      resourceType: http ? "Custom::RestateFargateService" : "Custom::RestateServiceDeployment",
       properties: {
-        servicePath: serviceName,
-        adminUrl: options?.adminUrl ?? environment.adminUrl,
-        authTokenSecretArn: authToken?.secretArn,
-        // Forward JSON-field extraction and extra headers only when set, to avoid CFN property diffs for existing users.
-        ...(authTokenJsonField !== undefined ? { authTokenJsonField } : {}),
-        ...(options?.additionalHeaders !== undefined ? { additionalHeaders: options.additionalHeaders } : {}),
-        serviceLambdaArn: handler.functionArn,
-        invokeRoleArn: invokerRole?.roleArn,
-        removalPolicy: options?.removalPolicy === cdk.RemovalPolicy.DESTROY ? "destroy" : ("retain" as const),
-        private: (options?.private ?? false).toString() as "true" | "false",
-        configurationVersion:
-          options?.configurationVersion ??
-          (handler.functionArn.endsWith(":$LATEST") ? new Date().toISOString() : undefined),
-        insecure: (options?.insecure ?? false).toString() as "true" | "false",
-        pruneDrainedDeployments: (options?.pruneDrainedDeployments ?? false).toString() as "true" | "false",
-        revisionHistoryLimit: options?.revisionHistoryLimit ?? 0,
-        maxPrunedPerRun: options?.maxPrunedPerRun ?? 10,
-        force: (options?.force ?? false).toString() as "true" | "false",
-        breaking: (options?.breaking ?? false).toString() as "true" | "false",
-        // Forward retry knobs only when the caller sets them, to avoid CFN property diffs for existing users.
-        ...(options?.healthCheckRetryAttempts !== undefined
-          ? { healthCheckRetryAttempts: options.healthCheckRetryAttempts }
-          : {}),
-        ...(options?.healthCheckMaxBackoff !== undefined
-          ? { healthCheckMaxBackoffSeconds: options.healthCheckMaxBackoff.toSeconds() }
-          : {}),
-      } satisfies RegistrationProperties,
+        ...({
+          servicePath: serviceName,
+          adminUrl: options?.adminUrl ?? environment.adminUrl,
+          authTokenSecretArn: authToken?.secretArn,
+          // Forward JSON-field extraction and extra headers only when set, to avoid CFN property diffs for existing users.
+          ...(authTokenJsonField !== undefined ? { authTokenJsonField } : {}),
+          ...(options?.additionalHeaders !== undefined ? { additionalHeaders: options.additionalHeaders } : {}),
+          ...(handler ? { serviceLambdaArn: handler.functionArn, invokeRoleArn: invokerRole?.roleArn } : {}),
+          ...(http
+            ? { serviceUri: http.uri, promoteToLatest: "true" as const, ownedEndpointPrefix: http.ownedEndpointPrefix }
+            : {}),
+          removalPolicy: options?.removalPolicy === cdk.RemovalPolicy.DESTROY ? "destroy" : ("retain" as const),
+          private: (options?.private ?? false).toString() as "true" | "false",
+          configurationVersion:
+            options?.configurationVersion ??
+            (handler?.functionArn.endsWith(":$LATEST") ? new Date().toISOString() : undefined),
+          insecure: (options?.insecure ?? false).toString() as "true" | "false",
+          pruneDrainedDeployments: (options?.pruneDrainedDeployments ?? false).toString() as "true" | "false",
+          revisionHistoryLimit: options?.revisionHistoryLimit ?? 0,
+          maxPrunedPerRun: options?.maxPrunedPerRun ?? 10,
+          force: (options?.force ?? false).toString() as "true" | "false",
+          breaking: (options?.breaking ?? false).toString() as "true" | "false",
+          // Forward retry knobs only when the caller sets them, to avoid CFN property diffs for existing users.
+          ...(options?.healthCheckRetryAttempts !== undefined
+            ? { healthCheckRetryAttempts: options.healthCheckRetryAttempts }
+            : {}),
+          ...(options?.healthCheckMaxBackoff !== undefined
+            ? { healthCheckMaxBackoffSeconds: options.healthCheckMaxBackoff.toSeconds() }
+            : {}),
+        } satisfies RegistrationProperties),
+        ...http?.extraProperties,
+      },
     });
 
-    if (invokerRole && !options?.skipInvokeFunctionGrant) {
+    if (handler && invokerRole && !options?.skipInvokeFunctionGrant) {
       // We create a separate policy which we'll attach to the provided invoker role. This breaks a circular cross-stack
       // dependency that would otherwise be created between the service deployer and the invoker role.
       if (!this.invocationPolicy) {
@@ -373,5 +418,7 @@ export class ServiceDeployer extends Construct {
         }),
       );
     }
+
+    return deployment;
   }
 }

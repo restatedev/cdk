@@ -12,11 +12,22 @@
 import type { CloudFormationCustomResourceEvent } from "aws-lambda/trigger/cloudformation-custom-resource";
 import type { Context } from "aws-lambda";
 
-import { GetSecretValueCommand, SecretsManagerClient } from "@aws-sdk/client-secrets-manager";
-
 import { randomInt } from "node:crypto";
-import * as https from "node:https";
-import * as http from "node:http";
+
+import {
+  ensureLatestDeployment,
+  escapeSqlString,
+  httpRequest,
+  queryRestate,
+  type HttpResponse,
+} from "./restate-admin.mjs";
+import type { FargateReleaseProperties } from "./fargate-contract.mjs";
+import { allocateListenerRulePriority } from "./fargate-priority.mjs";
+import { completeRelease } from "./fargate-release.mjs";
+import { removeAllVersions } from "./fargate-prune.mjs";
+import { buildBaseHeaders } from "./fargate-shared.mjs";
+
+export { buildBaseHeaders };
 
 /**
  * Custom Resource event shape for registering Restate Lambda service handlers with a Restate environment.
@@ -32,6 +43,21 @@ export interface RegistrationProperties {
   servicePath?: string;
 
   serviceLambdaArn?: string;
+
+  /** HTTP endpoint to register instead of a Lambda ARN. */
+  serviceUri?: string;
+
+  /**
+   * After registering, make this deployment the latest for all of its services. If Restate already knew the endpoint
+   * and a newer deployment holds latest (a rollback), re-register it with `force` to promote it.
+   */
+  promoteToLatest?: "true" | "false";
+
+  /**
+   * With `promoteToLatest`, only take latest over from deployments whose endpoint starts with this prefix: the other
+   * versions of the same construct. A service held by any other endpoint fails the registration instead.
+   */
+  ownedEndpointPrefix?: string;
 
   invokeRoleArn?: string;
 
@@ -133,60 +159,16 @@ function healthCheckBackoffBaseMs(attempt: number, maxBackoffMs: number): number
   return Math.min(2 ** attempt * 1_000, maxBackoffMs);
 }
 
-interface HttpResponse {
-  statusCode: number;
-  body: string;
-}
-
-async function httpRequest(
-  url: URL,
-  options: {
-    method: string;
-    headers?: Record<string, string>;
-    body?: string;
-    timeout?: number;
-    rejectUnauthorized?: boolean;
-  },
-): Promise<HttpResponse> {
-  return new Promise((resolve, reject) => {
-    const isHttps = url.protocol === "https:";
-    const lib = isHttps ? https : http;
-
-    const reqOptions: https.RequestOptions = {
-      hostname: url.hostname,
-      port: url.port || (isHttps ? 443 : 80),
-      path: url.pathname + url.search,
-      method: options.method,
-      headers: options.headers,
-      timeout: options.timeout,
-      rejectUnauthorized: options.rejectUnauthorized,
-    };
-
-    const req = lib.request(reqOptions, (res) => {
-      let body = "";
-      res.on("data", (chunk) => (body += chunk));
-      res.on("end", () => resolve({ statusCode: res.statusCode ?? 0, body }));
-    });
-
-    req.on("error", reject);
-    req.on("timeout", () => {
-      req.destroy();
-      reject(new Error("Request timed out"));
-    });
-
-    if (options.body) {
-      req.write(options.body);
-    }
-    req.end();
-  });
-}
-
 /**
  * Custom Resource event handler for Restate service registration. This handler backs the custom resources created by
  * {@link ServiceDeployer} to facilitate Lambda service handler discovery.
  */
 export const handler = async function (event: CloudFormationCustomResourceEvent, context: Context) {
   console.log({ event });
+
+  if (event.ResourceType === "Custom::RestateListenerRulePriority") {
+    return allocateListenerRulePriority(event);
+  }
 
   const props = event.ResourceProperties as RegistrationProperties;
   const rejectUnauthorized = props.insecure !== "true";
@@ -209,6 +191,16 @@ export const handler = async function (event: CloudFormationCustomResourceEvent,
       return;
     }
 
+    if (event.ResourceType === "Custom::RestateFargateService") {
+      const fargateProps = props as RegistrationProperties & FargateReleaseProperties;
+      if (fargateProps.prune === undefined) {
+        console.warn("Fargate release is missing prune configuration; nothing to remove.");
+      } else {
+        await removeAllVersions(fargateProps.prune, context);
+      }
+      return;
+    }
+
     let authHeader: Record<string, string> = {};
     try {
       authHeader = await buildBaseHeaders(props);
@@ -220,13 +212,14 @@ export const handler = async function (event: CloudFormationCustomResourceEvent,
       console.warn("Proceeding with deletion without the Authorization header.");
     }
 
-    console.log(`Removal policy is 'destroy'; finding deployment for ${props.serviceLambdaArn}`);
+    const deploymentEndpoint = props.serviceUri ?? props.serviceLambdaArn!;
+    console.log(`Removal policy is 'destroy'; finding deployment for ${deploymentEndpoint}`);
 
     // Best-effort deletion: log errors but don't fail CloudFormation delete
     try {
       const deploymentIds = await findDeploymentsByEndpoint(
         props.adminUrl!,
-        props.serviceLambdaArn!,
+        deploymentEndpoint,
         authHeader,
         rejectUnauthorized,
       );
@@ -301,9 +294,11 @@ export const handler = async function (event: CloudFormationCustomResourceEvent,
   }
 
   const deploymentsUrl = new URL(`${props.adminUrl}/${DEPLOYMENTS_PATH}`);
+  const endpointProperties = props.serviceUri
+    ? { uri: props.serviceUri }
+    : { arn: props.serviceLambdaArn, assume_role_arn: props.invokeRoleArn };
   const registrationRequest = JSON.stringify({
-    arn: props.serviceLambdaArn,
-    assume_role_arn: props.invokeRoleArn,
+    ...endpointProperties,
     force: props.force === "true",
     breaking: props.breaking === "true",
   });
@@ -374,6 +369,39 @@ export const handler = async function (event: CloudFormationCustomResourceEvent,
           console.log(`Successfully marked service as ${isPublic ? "public" : "private"}.`);
         }
 
+        if (props.promoteToLatest === "true") {
+          const serviceNames = response.services.map((s) => s.name);
+          await ensureLatestDeployment(
+            { adminUrl: props.adminUrl!, headers: authHeader, rejectUnauthorized },
+            response.id,
+            serviceNames,
+            async () => {
+              // Restate keeps the deployment id when re-registering an existing endpoint with force.
+              const forcedRegistrationRequest = JSON.stringify({
+                ...endpointProperties,
+                force: true,
+                breaking: props.breaking === "true",
+              });
+              const forcedResponse = await httpRequest(deploymentsUrl, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  ...authHeader,
+                },
+                body: forcedRegistrationRequest,
+                timeout: 10_000,
+                rejectUnauthorized,
+              });
+
+              if (forcedResponse.statusCode < 200 || forcedResponse.statusCode >= 300) {
+                throw new Error(`Forced re-registration failed (${forcedResponse.statusCode}): ${forcedResponse.body}`);
+              }
+              return JSON.parse(forcedResponse.body) as RegisterDeploymentResponse;
+            },
+            props.ownedEndpointPrefix,
+          );
+        }
+
         if (props.pruneDrainedDeployments === "true") {
           try {
             const serviceNames = response.services.map((s) => s.name);
@@ -393,6 +421,10 @@ export const handler = async function (event: CloudFormationCustomResourceEvent,
           } catch (e) {
             console.warn(`Failed to prune drained deployments: ${(e as Error)?.message}`);
           }
+        }
+
+        if (event.ResourceType === "Custom::RestateFargateService") {
+          await completeRelease(props as RegistrationProperties & FargateReleaseProperties, response.id, context);
         }
 
         return; // Overall success!
@@ -422,48 +454,6 @@ export const handler = async function (event: CloudFormationCustomResourceEvent,
   console.error(failureReason);
   throw new Error(failureReason ?? "Restate service registration failed. Please see logs for details.");
 };
-
-async function buildBaseHeaders(props: RegistrationProperties): Promise<Record<string, string>> {
-  const additionalHeaders = props.additionalHeaders ?? {};
-
-  if (!props.authTokenSecretArn) {
-    return { ...additionalHeaders };
-  }
-
-  console.log(`Using bearer authentication token from secret ${props.authTokenSecretArn}`);
-  const ssm = new SecretsManagerClient();
-  const response = await ssm.send(
-    new GetSecretValueCommand({
-      SecretId: props.authTokenSecretArn,
-    }),
-  );
-
-  console.log(`Successfully retrieved secret "${response.Name}" version ${response.VersionId}`);
-
-  let token = response.SecretString;
-  if (props.authTokenJsonField) {
-    let parsed: Record<string, unknown>;
-    try {
-      parsed = JSON.parse(response.SecretString ?? "");
-    } catch {
-      // Deliberately avoid echoing the secret material in the error.
-      throw new Error(`Secret value is not valid JSON; cannot extract field "${props.authTokenJsonField}".`);
-    }
-    const field = parsed?.[props.authTokenJsonField];
-    if (typeof field !== "string" || field.length === 0) {
-      throw new Error(
-        `Secret JSON field "${props.authTokenJsonField}" is missing, empty, or not a string; cannot use it as a bearer token.`,
-      );
-    }
-    token = field;
-  }
-
-  // Spread additionalHeaders last so a caller can override the Authorization header if they need to.
-  return {
-    Authorization: `Bearer ${token}`,
-    ...additionalHeaders,
-  };
-}
 
 async function sleep(millis: number) {
   return new Promise((resolve) => setTimeout(resolve, millis));
@@ -502,51 +492,16 @@ async function deleteDeployment(
   }
 }
 
-type QueryResponse = {
-  rows: Record<string, unknown>[];
-};
-
-async function queryRestate(
-  adminUrl: string,
-  sql: string,
-  authHeader: Record<string, string>,
-  rejectUnauthorized: boolean,
-): Promise<Record<string, unknown>[]> {
-  const queryUrl = new URL(`${adminUrl}/query`);
-
-  const queryResponse = await httpRequest(queryUrl, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "application/json", // Request JSON format (default is Apache Arrow IPC binary)
-      ...authHeader,
-    },
-    body: JSON.stringify({ query: sql }),
-    timeout: 30_000,
-    rejectUnauthorized,
-  });
-
-  if (queryResponse.statusCode !== 200) {
-    throw new Error(`Query failed (${queryResponse.statusCode}): ${queryResponse.body}`);
-  }
-
-  const response = JSON.parse(queryResponse.body) as QueryResponse;
-  return response.rows;
-}
-
-function escapeSqlString(value: string): string {
-  return value.replace(/'/g, "''");
-}
-
 async function findDeploymentsByEndpoint(
   adminUrl: string,
-  endpointArn: string,
+  endpoint: string,
   authHeader: Record<string, string>,
   rejectUnauthorized: boolean,
 ): Promise<string[]> {
+  // sys_deployment.endpoint holds either the Lambda ARN or the HTTP URI, so a single match works for both.
   const sql = `
     SELECT id FROM sys_deployment
-    WHERE endpoint = '${escapeSqlString(endpointArn)}'
+    WHERE endpoint = '${escapeSqlString(endpoint)}'
   `;
 
   const rows = await queryRestate(adminUrl, sql, authHeader, rejectUnauthorized);
