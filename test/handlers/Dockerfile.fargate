@@ -1,0 +1,4 @@
+FROM gcr.io/distroless/nodejs22-debian12:nonroot
+COPY dist/fargate.js /app/fargate.js
+EXPOSE 9080
+CMD ["/app/fargate.js"]

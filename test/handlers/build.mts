@@ -17,3 +17,4 @@ $.verbose = true;
 
 cd(path.dirname(fileURLToPath(import.meta.url)));
 await $`npx esbuild --bundle --platform=node handler.js --outfile=dist/bundle.js`;
+await $`npx esbuild --bundle --platform=node fargate.js --outfile=dist/fargate.js`;
