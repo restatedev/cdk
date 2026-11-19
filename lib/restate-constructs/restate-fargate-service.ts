@@ -384,7 +384,6 @@ export class RestateFargateService extends Construct implements ec2.IConnectable
           "application-autoscaling:DescribeScalableTargets",
           "application-autoscaling:DescribeScalingPolicies",
           "cloudformation:DescribeStackResources",
-          "tag:GetResources",
         ],
         resources: ["*"],
       }),
