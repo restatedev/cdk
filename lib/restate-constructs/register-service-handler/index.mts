@@ -338,36 +338,9 @@ export const handler = async function (event: CloudFormationCustomResourceEvent,
 
         console.log("Successful registration! Services: ", JSON.stringify(response.services));
 
-        const isPublic = (props.private ?? "false") === "false";
-
-        for (const service of response.services ?? []) {
-          if (service.public === isPublic) {
-            console.log(`Service ${service.name} is ${isPublic ? "public" : "private"}.`);
-            continue;
-          }
-
-          console.log(`Marking service ${service.name} as ${isPublic ? "public" : "private"}...`);
-          const patchUrl = new URL(`${props.adminUrl}/${SERVICES_PATH}/${service.name}`);
-
-          const patchResponse = await httpRequest(patchUrl, {
-            method: "PATCH",
-            headers: {
-              "Content-Type": "application/json",
-              ...authHeader,
-            },
-            body: JSON.stringify({ public: isPublic }),
-            timeout: 10_000,
-            rejectUnauthorized,
-          });
-
-          console.log(`Got patch response back: ${patchResponse.statusCode}`);
-          if (patchResponse.statusCode != 200) {
-            failureReason = `Marking service as ${props.private ? "private" : "public"} failed: (${patchResponse.statusCode})`;
-            break registration_retry_loop; // don't throw immediately - let retry loop decide whether to abort s
-          }
-
-          console.log(`Successfully marked service as ${isPublic ? "public" : "private"}.`);
-        }
+        // A forced re-registration creates new service revisions with default visibility, so set visibility after
+        // promotion, from the services that the last registration returned.
+        let registeredServices = response.services;
 
         if (props.promoteToLatest === "true") {
           const serviceNames = response.services.map((s) => s.name);
@@ -396,10 +369,43 @@ export const handler = async function (event: CloudFormationCustomResourceEvent,
               if (forcedResponse.statusCode < 200 || forcedResponse.statusCode >= 300) {
                 throw new Error(`Forced re-registration failed (${forcedResponse.statusCode}): ${forcedResponse.body}`);
               }
-              return JSON.parse(forcedResponse.body) as RegisterDeploymentResponse;
+              const forced = JSON.parse(forcedResponse.body) as RegisterDeploymentResponse;
+              registeredServices = forced.services;
+              return forced;
             },
             props.ownedEndpointPrefix,
           );
+        }
+
+        const isPublic = (props.private ?? "false") === "false";
+
+        for (const service of registeredServices ?? []) {
+          if (service.public === isPublic) {
+            console.log(`Service ${service.name} is ${isPublic ? "public" : "private"}.`);
+            continue;
+          }
+
+          console.log(`Marking service ${service.name} as ${isPublic ? "public" : "private"}...`);
+          const patchUrl = new URL(`${props.adminUrl}/${SERVICES_PATH}/${service.name}`);
+
+          const patchResponse = await httpRequest(patchUrl, {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+              ...authHeader,
+            },
+            body: JSON.stringify({ public: isPublic }),
+            timeout: 10_000,
+            rejectUnauthorized,
+          });
+
+          console.log(`Got patch response back: ${patchResponse.statusCode}`);
+          if (patchResponse.statusCode != 200) {
+            failureReason = `Marking service as ${props.private ? "private" : "public"} failed: (${patchResponse.statusCode})`;
+            break registration_retry_loop; // don't throw immediately - let retry loop decide whether to abort s
+          }
+
+          console.log(`Successfully marked service as ${isPublic ? "public" : "private"}.`);
         }
 
         if (props.pruneDrainedDeployments === "true") {
