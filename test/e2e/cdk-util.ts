@@ -129,3 +129,25 @@ export async function queryRestateCloudDeployments(adminUrl: string, authToken: 
   const data = (await response.json()) as { deployments: Deployment[] };
   return data.deployments;
 }
+
+/** Call `<service>/greet` through Restate ingress and return the HTTP status. */
+export async function callGreet(ingressUrl: string, service: string, authToken: string): Promise<number> {
+  const response = await fetch(`${ingressUrl}/${service}/greet`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${authToken}` },
+    body: JSON.stringify("e2e"),
+  });
+  await response.text();
+  return response.status;
+}
+
+/** Whether the Restate admin API reports the service as reachable through ingress. */
+export async function isServicePublic(adminUrl: string, service: string, authToken: string): Promise<boolean> {
+  const response = await fetch(`${adminUrl}/services/${service}`, {
+    headers: { Authorization: `Bearer ${authToken}` },
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to query service ${service}: ${response.status} ${response.statusText}`);
+  }
+  return ((await response.json()) as { public: boolean }).public;
+}
