@@ -161,15 +161,19 @@ describe("register-service handler promotion", () => {
     // already reset the service to public.
     const admin = await startRollbackAdmin({ forcedDeploymentId: "dp_unexpected" });
     try {
-      await handler(rollbackEvent(admin.url), undefined);
+      await expect(handler(rollbackEvent(admin.url), undefined)).rejects.toThrow(
+        "Forced re-registration produced deployment dp_unexpected",
+      );
 
+      // One forced registration, followed by the visibility fix and nothing that could undo it.
+      expect(admin.requests.filter(isForcedRegistration)).toHaveLength(1);
       const forced = admin.requests.findIndex(isForcedRegistration);
       const next = admin.requests.slice(forced + 1).find((r) => r.method !== "POST" || r.path !== "/query");
       expect(next).toEqual({ method: "PATCH", path: "/services/internal.Worker", body: '{"public":false}' });
     } finally {
       await admin.close();
     }
-  }, 20_000);
+  });
 
   test("sets visibility when promotion fails before re-registering", async () => {
     // The registration returns a new public revision, then every promotion query fails.
@@ -177,12 +181,12 @@ describe("register-service handler promotion", () => {
     try {
       await expect(handler(rollbackEvent(admin.url), undefined)).rejects.toThrow("Query failed (503)");
 
-      const patches = admin.requests.filter((r) => r.method === "PATCH");
-      expect(patches.length).toBeGreaterThan(0);
-      expect(patches.every((r) => r.path === "/services/internal.Worker" && r.body === '{"public":false}')).toBe(true);
-      expect(admin.requests.some(isForcedRegistration)).toBe(false);
+      expect(admin.requests.filter((r) => r.method === "PATCH")).toEqual([
+        { method: "PATCH", path: "/services/internal.Worker", body: '{"public":false}' },
+      ]);
+      expect(admin.requests.filter((r) => r.method === "POST" && r.path === "/deployments")).toHaveLength(1);
     } finally {
       await admin.close();
     }
-  }, 40_000);
+  });
 });

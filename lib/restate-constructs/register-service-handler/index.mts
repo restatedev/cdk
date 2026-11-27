@@ -381,8 +381,13 @@ export const handler = async function (event: CloudFormationCustomResourceEvent,
               props.ownedEndpointPrefix,
             );
           } catch (e) {
-            // A visibility PATCH changes a service's active revision, which here belongs to another owner.
-            if (e instanceof ForeignDeploymentError) throw e;
+            // Promotion checks its own result, so a failure is final: registering again would force again and reset
+            // the visibility set below.
+            if (e instanceof ForeignDeploymentError) {
+              // A visibility PATCH changes a service's active revision, which here belongs to another owner.
+              failureReason = e.message;
+              break registration_retry_loop;
+            }
             // Any registration above may have created revisions with default visibility; set it before failing, so
             // a failed promotion can't leave private services public.
             promotionError = e;
@@ -420,7 +425,10 @@ export const handler = async function (event: CloudFormationCustomResourceEvent,
           console.log(`Successfully marked service as ${isPublic ? "public" : "private"}.`);
         }
 
-        if (promotionError !== undefined) throw promotionError;
+        if (promotionError !== undefined) {
+          failureReason = (promotionError as Error)?.message ?? String(promotionError);
+          break registration_retry_loop;
+        }
 
         if (props.pruneDrainedDeployments === "true") {
           try {
