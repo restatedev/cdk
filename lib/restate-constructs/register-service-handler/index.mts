@@ -16,6 +16,7 @@ import { randomInt } from "node:crypto";
 
 import {
   ensureLatestDeployment,
+  ForeignDeploymentError,
   escapeSqlString,
   httpRequest,
   queryRestate,
@@ -380,10 +381,10 @@ export const handler = async function (event: CloudFormationCustomResourceEvent,
               props.ownedEndpointPrefix,
             );
           } catch (e) {
-            // Without a forced re-registration nothing changed, so fail without touching visibility. After one, its
-            // new revisions have default visibility; set it before failing, so a failed promotion can't leave
-            // private services public.
-            if (registeredServices === response.services) throw e;
+            // A visibility PATCH changes a service's active revision, which here belongs to another owner.
+            if (e instanceof ForeignDeploymentError) throw e;
+            // Any registration above may have created revisions with default visibility; set it before failing, so
+            // a failed promotion can't leave private services public.
             promotionError = e;
           }
         }

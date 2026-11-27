@@ -53,9 +53,17 @@ interface AdminRequest {
  * endpoint again returns its existing private revision; registering it with `force` promotes it and, like Restate,
  * creates a new revision with default (public) visibility.
  */
-async function startRollbackAdmin(
+async function startRollbackAdmin({
   forcedDeploymentId = ROLLED_BACK_DEPLOYMENT,
-): Promise<{ url: string; requests: AdminRequest[]; close: () => Promise<void> }> {
+  queryStatus = 200,
+  registeredPublic = false,
+}: {
+  forcedDeploymentId?: string;
+  /** Status for every /query request; anything but 200 fails the promotion before it re-registers. */
+  queryStatus?: number;
+  /** Visibility of the revision a plain registration returns. */
+  registeredPublic?: boolean;
+} = {}): Promise<{ url: string; requests: AdminRequest[]; close: () => Promise<void> }> {
   const requests: AdminRequest[] = [];
   let latestDeployment = NEWER_DEPLOYMENT;
   const server = http.createServer((req, res) => {
@@ -72,8 +80,11 @@ async function startRollbackAdmin(
         if (force) latestDeployment = ROLLED_BACK_DEPLOYMENT;
         reply({
           id: force ? forcedDeploymentId : ROLLED_BACK_DEPLOYMENT,
-          services: [{ name: "internal.Worker", revision: 1, public: force }],
+          services: [{ name: "internal.Worker", revision: 1, public: force || registeredPublic }],
         });
+      } else if (req.method === "POST" && req.url === "/query" && queryStatus !== 200) {
+        res.writeHead(queryStatus);
+        res.end();
       } else if (req.method === "POST" && req.url === "/query") {
         const sql = JSON.parse(body).query as string;
         reply({
@@ -148,7 +159,7 @@ describe("register-service handler promotion", () => {
   test("sets visibility when promotion fails after the forced re-registration", async () => {
     // The forced registration answers with an unexpected deployment id, which fails the promotion after Restate has
     // already reset the service to public.
-    const admin = await startRollbackAdmin("dp_unexpected");
+    const admin = await startRollbackAdmin({ forcedDeploymentId: "dp_unexpected" });
     try {
       await handler(rollbackEvent(admin.url), undefined);
 
@@ -159,4 +170,19 @@ describe("register-service handler promotion", () => {
       await admin.close();
     }
   }, 20_000);
+
+  test("sets visibility when promotion fails before re-registering", async () => {
+    // The registration returns a new public revision, then every promotion query fails.
+    const admin = await startRollbackAdmin({ queryStatus: 503, registeredPublic: true });
+    try {
+      await expect(handler(rollbackEvent(admin.url), undefined)).rejects.toThrow("Query failed (503)");
+
+      const patches = admin.requests.filter((r) => r.method === "PATCH");
+      expect(patches.length).toBeGreaterThan(0);
+      expect(patches.every((r) => r.path === "/services/internal.Worker" && r.body === '{"public":false}')).toBe(true);
+      expect(admin.requests.some(isForcedRegistration)).toBe(false);
+    } finally {
+      await admin.close();
+    }
+  }, 40_000);
 });

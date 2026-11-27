@@ -102,12 +102,17 @@ export interface RestateAdmin {
   rejectUnauthorized: boolean;
 }
 
+/** Promotion refused because another owner's deployment holds the services. */
+export class ForeignDeploymentError extends Error {}
+
 /**
  * Ensures the given deployment is the latest one for every listed service.
  *
  * Restate reports a repeated registration of an already-known endpoint as "unchanged" and leaves the existing
  * deployment in place, which is not enough when a CloudFormation rollback re-registers an older version. In that case
  * we re-register with `force`, which keeps the deployment id but re-runs discovery and makes it latest.
+ *
+ * @throws ForeignDeploymentError if deployments outside `ownedEndpointPrefix` hold the services
  */
 export async function ensureLatestDeployment(
   admin: RestateAdmin,
@@ -138,7 +143,7 @@ export async function ensureLatestDeployment(
     const endpoints = await queryDeploymentEndpoints(admin, holders);
     const foreign = holders.filter((id) => !(endpoints.get(id) ?? "").startsWith(ownedEndpointPrefix));
     if (foreign.length > 0) {
-      throw new Error(
+      throw new ForeignDeploymentError(
         `Refusing to promote ${deploymentId}: services are held by deployments outside ${ownedEndpointPrefix} ` +
           `(${foreign.map((id) => `${id} at ${endpoints.get(id) ?? "<unknown>"}`).join(", ")}). ` +
           "Another owner registered these services; resolve that before releasing.",
