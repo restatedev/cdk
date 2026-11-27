@@ -53,7 +53,9 @@ interface AdminRequest {
  * endpoint again returns its existing private revision; registering it with `force` promotes it and, like Restate,
  * creates a new revision with default (public) visibility.
  */
-async function startRollbackAdmin(): Promise<{ url: string; requests: AdminRequest[]; close: () => Promise<void> }> {
+async function startRollbackAdmin(
+  forcedDeploymentId = ROLLED_BACK_DEPLOYMENT,
+): Promise<{ url: string; requests: AdminRequest[]; close: () => Promise<void> }> {
   const requests: AdminRequest[] = [];
   let latestDeployment = NEWER_DEPLOYMENT;
   const server = http.createServer((req, res) => {
@@ -68,7 +70,10 @@ async function startRollbackAdmin(): Promise<{ url: string; requests: AdminReque
       if (req.method === "POST" && req.url === "/deployments") {
         const force = JSON.parse(body).force === true;
         if (force) latestDeployment = ROLLED_BACK_DEPLOYMENT;
-        reply({ id: ROLLED_BACK_DEPLOYMENT, services: [{ name: "internal.Worker", revision: 1, public: force }] });
+        reply({
+          id: force ? forcedDeploymentId : ROLLED_BACK_DEPLOYMENT,
+          services: [{ name: "internal.Worker", revision: 1, public: force }],
+        });
       } else if (req.method === "POST" && req.url === "/query") {
         const sql = JSON.parse(body).query as string;
         reply({
@@ -90,43 +95,68 @@ async function startRollbackAdmin(): Promise<{ url: string; requests: AdminReque
   };
 }
 
+function rollbackEvent(adminUrl: string): CloudFormationCustomResourceEvent {
+  const properties: RegistrationProperties = {
+    adminUrl,
+    serviceUri: `${ENDPOINT_PREFIX}v1`,
+    promoteToLatest: "true",
+    ownedEndpointPrefix: ENDPOINT_PREFIX,
+    removalPolicy: "retain",
+    private: "true",
+  };
+  return {
+    RequestType: "Update",
+    ServiceToken: "token",
+    ResponseURL: "https://example.com/response",
+    StackId: "stack",
+    RequestId: "request",
+    LogicalResourceId: "RestateServiceDeployment",
+    PhysicalResourceId: "physical",
+    ResourceType: "Custom::RestateServiceDeployment",
+    ResourceProperties: { ServiceToken: "token", ...properties },
+    OldResourceProperties: { ServiceToken: "token" },
+  };
+}
+
+const isForcedRegistration = (r: AdminRequest) =>
+  r.method === "POST" && r.path === "/deployments" && JSON.parse(r.body).force === true;
+
 describe("register-service handler promotion", () => {
-  test("sets visibility after a forced promotion resets it", async () => {
-    const handler = loadHandler();
-    const admin = await startRollbackAdmin();
+  const handler = loadHandler();
+
+  beforeEach(() => {
     jest.spyOn(console, "log").mockImplementation(() => {});
+    jest.spyOn(console, "error").mockImplementation(() => {});
+  });
+
+  afterEach(() => jest.restoreAllMocks());
+
+  test("sets visibility after a forced promotion resets it", async () => {
+    const admin = await startRollbackAdmin();
     try {
-      const properties: RegistrationProperties = {
-        adminUrl: admin.url,
-        serviceUri: `${ENDPOINT_PREFIX}v1`,
-        promoteToLatest: "true",
-        ownedEndpointPrefix: ENDPOINT_PREFIX,
-        removalPolicy: "retain",
-        private: "true",
-      };
-      await handler(
-        {
-          RequestType: "Update",
-          ServiceToken: "token",
-          ResponseURL: "https://example.com/response",
-          StackId: "stack",
-          RequestId: "request",
-          LogicalResourceId: "RestateServiceDeployment",
-          PhysicalResourceId: "physical",
-          ResourceType: "Custom::RestateServiceDeployment",
-          ResourceProperties: { ServiceToken: "token", ...properties },
-          OldResourceProperties: { ServiceToken: "token" },
-        },
-        undefined,
-      );
+      await handler(rollbackEvent(admin.url), undefined);
 
       const patches = admin.requests
         .filter((r) => r.method === "PATCH")
         .map((r) => ({ path: r.path, body: JSON.parse(r.body) }));
       expect(patches).toEqual([{ path: "/services/internal.Worker", body: { public: false } }]);
     } finally {
-      jest.restoreAllMocks();
       await admin.close();
     }
   });
+
+  test("sets visibility when promotion fails after the forced re-registration", async () => {
+    // The forced registration answers with an unexpected deployment id, which fails the promotion after Restate has
+    // already reset the service to public.
+    const admin = await startRollbackAdmin("dp_unexpected");
+    try {
+      await handler(rollbackEvent(admin.url), undefined);
+
+      const forced = admin.requests.findIndex(isForcedRegistration);
+      const next = admin.requests.slice(forced + 1).find((r) => r.method !== "POST" || r.path !== "/query");
+      expect(next).toEqual({ method: "PATCH", path: "/services/internal.Worker", body: '{"public":false}' });
+    } finally {
+      await admin.close();
+    }
+  }, 20_000);
 });

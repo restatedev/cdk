@@ -341,40 +341,51 @@ export const handler = async function (event: CloudFormationCustomResourceEvent,
         // A forced re-registration creates new service revisions with default visibility, so set visibility after
         // promotion, from the services that the last registration returned.
         let registeredServices = response.services;
+        let promotionError: unknown;
 
         if (props.promoteToLatest === "true") {
           const serviceNames = response.services.map((s) => s.name);
-          await ensureLatestDeployment(
-            { adminUrl: props.adminUrl!, headers: authHeader, rejectUnauthorized },
-            response.id,
-            serviceNames,
-            async () => {
-              // Restate keeps the deployment id when re-registering an existing endpoint with force.
-              const forcedRegistrationRequest = JSON.stringify({
-                ...endpointProperties,
-                force: true,
-                breaking: props.breaking === "true",
-              });
-              const forcedResponse = await httpRequest(deploymentsUrl, {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  ...authHeader,
-                },
-                body: forcedRegistrationRequest,
-                timeout: 10_000,
-                rejectUnauthorized,
-              });
+          try {
+            await ensureLatestDeployment(
+              { adminUrl: props.adminUrl!, headers: authHeader, rejectUnauthorized },
+              response.id,
+              serviceNames,
+              async () => {
+                // Restate keeps the deployment id when re-registering an existing endpoint with force.
+                const forcedRegistrationRequest = JSON.stringify({
+                  ...endpointProperties,
+                  force: true,
+                  breaking: props.breaking === "true",
+                });
+                const forcedResponse = await httpRequest(deploymentsUrl, {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    ...authHeader,
+                  },
+                  body: forcedRegistrationRequest,
+                  timeout: 10_000,
+                  rejectUnauthorized,
+                });
 
-              if (forcedResponse.statusCode < 200 || forcedResponse.statusCode >= 300) {
-                throw new Error(`Forced re-registration failed (${forcedResponse.statusCode}): ${forcedResponse.body}`);
-              }
-              const forced = JSON.parse(forcedResponse.body) as RegisterDeploymentResponse;
-              registeredServices = forced.services;
-              return forced;
-            },
-            props.ownedEndpointPrefix,
-          );
+                if (forcedResponse.statusCode < 200 || forcedResponse.statusCode >= 300) {
+                  throw new Error(
+                    `Forced re-registration failed (${forcedResponse.statusCode}): ${forcedResponse.body}`,
+                  );
+                }
+                const forced = JSON.parse(forcedResponse.body) as RegisterDeploymentResponse;
+                registeredServices = forced.services;
+                return forced;
+              },
+              props.ownedEndpointPrefix,
+            );
+          } catch (e) {
+            // Without a forced re-registration nothing changed, so fail without touching visibility. After one, its
+            // new revisions have default visibility; set it before failing, so a failed promotion can't leave
+            // private services public.
+            if (registeredServices === response.services) throw e;
+            promotionError = e;
+          }
         }
 
         const isPublic = (props.private ?? "false") === "false";
@@ -402,11 +413,13 @@ export const handler = async function (event: CloudFormationCustomResourceEvent,
           console.log(`Got patch response back: ${patchResponse.statusCode}`);
           if (patchResponse.statusCode != 200) {
             failureReason = `Marking service as ${props.private ? "private" : "public"} failed: (${patchResponse.statusCode})`;
-            break registration_retry_loop; // don't throw immediately - let retry loop decide whether to abort s
+            break registration_retry_loop; // fail the deployment without retrying the registration
           }
 
           console.log(`Successfully marked service as ${isPublic ? "public" : "private"}.`);
         }
+
+        if (promotionError !== undefined) throw promotionError;
 
         if (props.pruneDrainedDeployments === "true") {
           try {
