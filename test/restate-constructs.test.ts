@@ -22,6 +22,7 @@ import {
   RestateCloudEnvironment,
   RestateEnvironment,
   ServiceDeployer,
+  ServiceRegistrationProps,
   SingleNodeRestateDeployment,
   TlsTermination,
 } from "../lib/restate-constructs";
@@ -372,6 +373,58 @@ describe("Restate constructs", () => {
     expect(() => serviceDeployer.register(handler.currentVersion, restateEnvironment)).toThrow(
       "authTokenJsonField requires an authToken",
     );
+  });
+
+  test.each([
+    { options: {}, expected: "false" },
+    { options: { private: false }, expected: "false" },
+    { options: { private: true }, expected: "true" },
+    { options: { visibility: "public" }, expected: "false" },
+    { options: { visibility: "private" }, expected: "true" },
+    { options: { visibility: "declared" }, expected: "declared" },
+  ] satisfies { options: ServiceRegistrationProps; expected: string }[])(
+    "Service Deployer encodes visibility $options as private=$expected",
+    ({ options, expected }) => {
+      const app = new cdk.App();
+      const stack = new cdk.Stack(app, "ServiceDeployerVisibility", {
+        env: { account: "account-id", region: "region" },
+      });
+      const restateEnvironment = RestateEnvironment.fromAttributes({
+        adminUrl: "https://restate.example.com:9070",
+      });
+      const handler = mockHandler(stack);
+      const serviceDeployer = new ServiceDeployer(stack, "ServiceDeployer", {
+        code: lambda.Code.fromAsset("dist/register-service-handler"),
+      });
+      serviceDeployer.register(handler.currentVersion, restateEnvironment, options);
+
+      const properties = Template.fromStack(stack).findResources("Custom::RestateServiceDeployment");
+      const customResource = Object.values(properties)[0]!.Properties as Record<string, unknown>;
+      expect(customResource.private).toBe(expected);
+    },
+  );
+
+  test("Service Deployer rejects both private and visibility", () => {
+    const app = new cdk.App();
+    const stack = new cdk.Stack(app, "ServiceDeployerConflictingVisibility", {
+      env: { account: "account-id", region: "region" },
+    });
+    const restateEnvironment = RestateEnvironment.fromAttributes({
+      adminUrl: "https://restate.example.com:9070",
+    });
+    const handler = mockHandler(stack);
+    const serviceDeployer = new ServiceDeployer(stack, "ServiceDeployer", {
+      code: lambda.Code.fromAsset("dist/register-service-handler"),
+    });
+
+    expect(() =>
+      serviceDeployer.register(handler.currentVersion, restateEnvironment, { private: true, visibility: "declared" }),
+    ).toThrow("Set either `private` or `visibility`");
+    expect(() =>
+      serviceDeployer.register(handler.currentVersion, restateEnvironment, {
+        visibility: "Private" as ServiceRegistrationProps["visibility"],
+      }),
+    ).toThrow('Unknown service visibility "Private"');
   });
 
   test("[Experimental] Create a self-hosted Restate environment deployed on ECS Fargate", () => {

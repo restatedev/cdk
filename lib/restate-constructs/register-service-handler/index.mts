@@ -85,10 +85,11 @@ export interface RegistrationProperties {
   configurationVersion?: string;
 
   /**
-   * Whether to mark the service as private, and make it unavailable to be called via Restate ingress. If there are
-   * multiple services provided by the endpoint, they will all be marked as specified.
+   * Ingress visibility to apply after registration. `"true"` marks every service of the endpoint private, `"false"`
+   * (the default) marks them all public. `"declared"` changes nothing, so each service keeps the visibility that
+   * registration gave it: private if its definition declares `ingressPrivate`, else public.
    */
-  private?: "true" | "false";
+  private?: "true" | "false" | "declared";
 
   /** Whether to trust any certificate when connecting to the admin endpoint. */
   insecure?: "true" | "false";
@@ -245,6 +246,11 @@ export const handler = async function (event: CloudFormationCustomResourceEvent,
     return;
   }
 
+  // Reject unknown values instead of guessing a visibility: a wrong guess could expose private services via ingress.
+  if (props.private !== undefined && !["true", "false", "declared"].includes(props.private)) {
+    throw new Error(`Invalid private property "${props.private}"; expected "true", "false" or "declared".`);
+  }
+
   const authHeader = await buildBaseHeaders(props);
 
   let attempt;
@@ -394,35 +400,34 @@ export const handler = async function (event: CloudFormationCustomResourceEvent,
           }
         }
 
-        const isPublic = (props.private ?? "false") === "false";
+        if (props.private === "declared") {
+          console.log('Visibility is "declared"; leaving each service as registration set it.');
+        } else {
+          const isPublic = props.private !== "true";
 
-        for (const service of registeredServices ?? []) {
-          if (service.public === isPublic) {
-            console.log(`Service ${service.name} is ${isPublic ? "public" : "private"}.`);
-            continue;
+          for (const service of registeredServices ?? []) {
+            if (service.public === isPublic) {
+              console.log(`Service ${service.name} is ${isPublic ? "public" : "private"}.`);
+              continue;
+            }
+
+            console.log(`Marking service ${service.name} as ${isPublic ? "public" : "private"}...`);
+            const visibilityFailure = await setServiceVisibility(
+              props.adminUrl!,
+              service.name,
+              isPublic,
+              authHeader,
+              rejectUnauthorized,
+              context,
+            );
+            if (visibilityFailure !== undefined) {
+              // Registration succeeded; registering again would not help, and servers before 1.6 reject it.
+              failureReason = visibilityFailure;
+              break registration_retry_loop;
+            }
+
+            console.log(`Successfully marked service as ${isPublic ? "public" : "private"}.`);
           }
-
-          console.log(`Marking service ${service.name} as ${isPublic ? "public" : "private"}...`);
-          const patchUrl = new URL(`${props.adminUrl}/${SERVICES_PATH}/${service.name}`);
-
-          const patchResponse = await httpRequest(patchUrl, {
-            method: "PATCH",
-            headers: {
-              "Content-Type": "application/json",
-              ...authHeader,
-            },
-            body: JSON.stringify({ public: isPublic }),
-            timeout: 10_000,
-            rejectUnauthorized,
-          });
-
-          console.log(`Got patch response back: ${patchResponse.statusCode}`);
-          if (patchResponse.statusCode != 200) {
-            failureReason = `Marking service as ${props.private ? "private" : "public"} failed: (${patchResponse.statusCode})`;
-            break registration_retry_loop; // fail the deployment without retrying the registration
-          }
-
-          console.log(`Successfully marked service as ${isPublic ? "public" : "private"}.`);
         }
 
         if (promotionError !== undefined) {
@@ -465,7 +470,7 @@ export const handler = async function (event: CloudFormationCustomResourceEvent,
         });
       }
     } catch (e) {
-      console.error(`Registration failed: ${(e as Error)?.message} (attempt ${attempt})`);
+      console.error(`Registration attempt ${attempt} failed: ${(e as Error)?.message}`);
       failureReason = (e as Error)?.message;
     }
 
@@ -482,6 +487,60 @@ export const handler = async function (event: CloudFormationCustomResourceEvent,
   console.error(failureReason);
   throw new Error(failureReason ?? "Restate service registration failed. Please see logs for details.");
 };
+
+const VISIBILITY_UPDATE_ATTEMPTS = 3;
+const VISIBILITY_REQUEST_TIMEOUT_MS = 10_000;
+// Lambda time each visibility request needs: the request itself plus a margin to answer CloudFormation afterwards.
+const VISIBILITY_REQUEST_RESERVE_MS = VISIBILITY_REQUEST_TIMEOUT_MS + 5_000;
+
+/**
+ * Set a service's ingress visibility. Network errors and 5xx responses are retried with backoff; any other response
+ * fails at once, since repeating the request would not change it. No request starts unless the Lambda has time to
+ * finish it and still answer CloudFormation, so running out of time fails the deployment instead of timing out.
+ *
+ * @returns why the update failed, or `undefined` once it succeeds
+ */
+async function setServiceVisibility(
+  adminUrl: string,
+  serviceName: string,
+  isPublic: boolean,
+  headers: Record<string, string>,
+  rejectUnauthorized: boolean,
+  context: Context | undefined,
+): Promise<string | undefined> {
+  const patchUrl = new URL(`${adminUrl}/${SERVICES_PATH}/${serviceName}`);
+  const action = `Marking service ${serviceName} as ${isPublic ? "public" : "private"}`;
+  let failure = `${action} did not start`;
+  for (let attempt = 1; ; attempt++) {
+    const remainingMs = context?.getRemainingTimeInMillis();
+    if (remainingMs !== undefined && remainingMs < VISIBILITY_REQUEST_RESERVE_MS) {
+      return `${failure}; only ${remainingMs} ms of Lambda time left`;
+    }
+    try {
+      const patchResponse = await httpRequest(patchUrl, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", ...headers },
+        body: JSON.stringify({ public: isPublic }),
+        timeout: VISIBILITY_REQUEST_TIMEOUT_MS,
+        rejectUnauthorized,
+      });
+      if (patchResponse.statusCode === 200) {
+        return undefined;
+      }
+      failure = `${action} failed: (${patchResponse.statusCode}) ${patchResponse.body ?? ""}`.trimEnd();
+      if (patchResponse.statusCode < 500) {
+        return failure;
+      }
+    } catch (e) {
+      failure = `${action} failed: ${(e as Error)?.message}`;
+    }
+    console.error(`${failure} (attempt ${attempt})`);
+    if (attempt >= VISIBILITY_UPDATE_ATTEMPTS) {
+      return failure;
+    }
+    await sleep(randomInt(1_000) + attempt * 1_000);
+  }
+}
 
 async function sleep(millis: number) {
   return new Promise((resolve) => setTimeout(resolve, millis));
