@@ -74,11 +74,11 @@ export interface ServiceRegistrationProps {
   /**
    * Private services are only available to other Restate services in the same environment, and are not accessible for
    * ingress-based invocation. If multiple services are exposed by the same handler, all of them will be updated.
-   * Default: `false`, i.e. services will be made public and reachable via ingress by default.
    *
    * Equivalent to `visibility: "private"` (`true`) or `visibility: "public"` (`false`). Set at most one of the two.
+   * Default: unset, which keeps the visibility each service declares (`visibility: "declared"`).
    *
-   * @see visibility to keep the visibility each service declares instead
+   * @see visibility
    * @see https://docs.restate.dev/operate/registration#private-services
    */
   private?: boolean;
@@ -93,12 +93,13 @@ export interface ServiceRegistrationProps {
    *   TypeScript SDK), and public otherwise. Restate 1.4 honours the declaration too, but keeps the previous
    *   visibility of a service that declares nothing; earlier servers don't support the declaration, and the
    *   TypeScript SDK fails discovery against them. On Restate 1.6 and newer, re-registering an unchanged deployment
-   *   creates no new revision and leaves visibility as it is. Use this when one deployment serves both public and
-   *   private services. Requires the registration handler that ships with this library version: a handler passed via
-   *   `ServiceDeployerProps.code` that predates this option treats `"declared"` as private and marks every service
-   *   private.
+   *   without `force` creates no new revision and leaves visibility as it is. Use this when one deployment serves both
+   *   public and private services. Requires the registration handler that ships with this library version: a handler
+   *   passed via `ServiceDeployerProps.code` that predates this option treats `"declared"` as private and marks every
+   *   service private.
    *
-   * Default: the value implied by `private`, i.e. `"public"` when neither option is set.
+   * Default: `"declared"` when `private` is not set either. Before version 1.8.0 the default was `"public"`; set it
+   * explicitly to keep making every service public on each deploy.
    *
    * @see https://docs.restate.dev/operate/registration#private-services
    */
@@ -452,14 +453,15 @@ export class ServiceDeployer extends Construct {
 
 /**
  * Encode the requested visibility as the custom resource's `private` property. Explicit modes encode as `"true"` and
- * `"false"`, the same values that `private: true` and `private: false` produce, so templates of stacks using `private`
- * stay unchanged.
+ * `"false"`, the same values that `private: true` and `private: false` produce, so templates of stacks that set
+ * `private` stay unchanged. An explicit `private: false` still forces every service public.
  */
 function registrationVisibility(options: ServiceRegistrationProps | undefined): "true" | "false" | "declared" {
   if (options?.private !== undefined && options.visibility !== undefined) {
     throw new Error("Set either `private` or `visibility` on a service registration, not both.");
   }
-  const visibility = options?.visibility ?? (options?.private ? "private" : "public");
+  const visibility =
+    options?.visibility ?? (options?.private === undefined ? "declared" : options.private ? "private" : "public");
   switch (visibility) {
     case "public":
       return "false";

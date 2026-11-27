@@ -21,9 +21,8 @@ ones private.
 
 ### Impact on Users
 
-- The default is unchanged: without `private` or `visibility`, every service is made public.
-- Existing stacks synthesize the same custom resource properties. The registration handler's code changes, so
-  CloudFormation updates the deployer Lambda once on upgrade.
+- `"declared"` is the default from this release on; see #114 for the upgrade impact.
+- The registration handler's code changes, so CloudFormation updates the deployer Lambda once on upgrade.
 - `"declared"` follows the declaration on Restate server 1.5 and newer. Restate 1.4 honours it too, but a service
   that declares nothing keeps its previous visibility instead of becoming public. Earlier servers don't support the
   declaration, and the TypeScript SDK fails discovery against them.

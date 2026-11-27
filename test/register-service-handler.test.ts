@@ -195,7 +195,7 @@ describe("register-service handler visibility", () => {
     expect(admin.requests).toEqual([]);
   });
 
-  test("unset visibility marks every private service public", async () => {
+  test("an absent private property marks every private service public", async () => {
     await handler(createEvent(admin.url, undefined), undefined);
 
     expect(patches()).toEqual([{ path: "/services/internal.Worker", body: { public: true } }]);
