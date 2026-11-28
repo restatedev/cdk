@@ -16,6 +16,7 @@ import { randomInt } from "node:crypto";
 
 import {
   ensureLatestDeployment,
+  ForeignDeploymentError,
   escapeSqlString,
   httpRequest,
   queryRestate,
@@ -338,9 +339,64 @@ export const handler = async function (event: CloudFormationCustomResourceEvent,
 
         console.log("Successful registration! Services: ", JSON.stringify(response.services));
 
+        // A forced re-registration creates new service revisions with default visibility, so set visibility after
+        // promotion, from the services that the last registration returned.
+        let registeredServices = response.services;
+        let promotionError: unknown;
+
+        if (props.promoteToLatest === "true") {
+          const serviceNames = response.services.map((s) => s.name);
+          try {
+            await ensureLatestDeployment(
+              { adminUrl: props.adminUrl!, headers: authHeader, rejectUnauthorized },
+              response.id,
+              serviceNames,
+              async () => {
+                // Restate keeps the deployment id when re-registering an existing endpoint with force.
+                const forcedRegistrationRequest = JSON.stringify({
+                  ...endpointProperties,
+                  force: true,
+                  breaking: props.breaking === "true",
+                });
+                const forcedResponse = await httpRequest(deploymentsUrl, {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    ...authHeader,
+                  },
+                  body: forcedRegistrationRequest,
+                  timeout: 10_000,
+                  rejectUnauthorized,
+                });
+
+                if (forcedResponse.statusCode < 200 || forcedResponse.statusCode >= 300) {
+                  throw new Error(
+                    `Forced re-registration failed (${forcedResponse.statusCode}): ${forcedResponse.body}`,
+                  );
+                }
+                const forced = JSON.parse(forcedResponse.body) as RegisterDeploymentResponse;
+                registeredServices = forced.services;
+                return forced;
+              },
+              props.ownedEndpointPrefix,
+            );
+          } catch (e) {
+            // Promotion checks its own result, so a failure is final: registering again would force again and reset
+            // the visibility set below.
+            if (e instanceof ForeignDeploymentError) {
+              // A visibility PATCH changes a service's active revision, which here belongs to another owner.
+              failureReason = e.message;
+              break registration_retry_loop;
+            }
+            // Any registration above may have created revisions with default visibility; set it before failing, so
+            // a failed promotion can't leave private services public.
+            promotionError = e;
+          }
+        }
+
         const isPublic = (props.private ?? "false") === "false";
 
-        for (const service of response.services ?? []) {
+        for (const service of registeredServices ?? []) {
           if (service.public === isPublic) {
             console.log(`Service ${service.name} is ${isPublic ? "public" : "private"}.`);
             continue;
@@ -363,43 +419,15 @@ export const handler = async function (event: CloudFormationCustomResourceEvent,
           console.log(`Got patch response back: ${patchResponse.statusCode}`);
           if (patchResponse.statusCode != 200) {
             failureReason = `Marking service as ${props.private ? "private" : "public"} failed: (${patchResponse.statusCode})`;
-            break registration_retry_loop; // don't throw immediately - let retry loop decide whether to abort s
+            break registration_retry_loop; // fail the deployment without retrying the registration
           }
 
           console.log(`Successfully marked service as ${isPublic ? "public" : "private"}.`);
         }
 
-        if (props.promoteToLatest === "true") {
-          const serviceNames = response.services.map((s) => s.name);
-          await ensureLatestDeployment(
-            { adminUrl: props.adminUrl!, headers: authHeader, rejectUnauthorized },
-            response.id,
-            serviceNames,
-            async () => {
-              // Restate keeps the deployment id when re-registering an existing endpoint with force.
-              const forcedRegistrationRequest = JSON.stringify({
-                ...endpointProperties,
-                force: true,
-                breaking: props.breaking === "true",
-              });
-              const forcedResponse = await httpRequest(deploymentsUrl, {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  ...authHeader,
-                },
-                body: forcedRegistrationRequest,
-                timeout: 10_000,
-                rejectUnauthorized,
-              });
-
-              if (forcedResponse.statusCode < 200 || forcedResponse.statusCode >= 300) {
-                throw new Error(`Forced re-registration failed (${forcedResponse.statusCode}): ${forcedResponse.body}`);
-              }
-              return JSON.parse(forcedResponse.body) as RegisterDeploymentResponse;
-            },
-            props.ownedEndpointPrefix,
-          );
+        if (promotionError !== undefined) {
+          failureReason = (promotionError as Error)?.message ?? String(promotionError);
+          break registration_retry_loop;
         }
 
         if (props.pruneDrainedDeployments === "true") {
