@@ -36,6 +36,9 @@ type RegistrationTarget =
       };
     };
 
+/** How {@link ServiceDeployer} sets the ingress visibility of a deployment's services; see {@link ServiceRegistrationProps.visibility}. */
+export type ServiceVisibility = "public" | "private" | "declared";
+
 export interface ServiceRegistrationProps {
   /**
    * Secrets Manager secret ARN for the authentication token to use when calling the admin API. Takes precedence
@@ -73,9 +76,33 @@ export interface ServiceRegistrationProps {
    * ingress-based invocation. If multiple services are exposed by the same handler, all of them will be updated.
    * Default: `false`, i.e. services will be made public and reachable via ingress by default.
    *
+   * Equivalent to `visibility: "private"` (`true`) or `visibility: "public"` (`false`). Set at most one of the two.
+   *
+   * @see visibility to keep the visibility each service declares instead
    * @see https://docs.restate.dev/operate/registration#private-services
    */
   private?: boolean;
+
+  /**
+   * Which services of the deployment are reachable via Restate ingress after registration.
+   *
+   * - `"public"`: make every service in the deployment public.
+   * - `"private"`: make every service in the deployment private, reachable only from other Restate services.
+   * - `"declared"`: leave visibility as registration set it. On Restate server 1.5 and newer, each new service
+   *   revision is private if the service definition declares ingress privacy (e.g. `ingressPrivate: true` in the
+   *   TypeScript SDK), and public otherwise. Restate 1.4 honours the declaration too, but keeps the previous
+   *   visibility of a service that declares nothing; earlier servers don't support the declaration, and the
+   *   TypeScript SDK fails discovery against them. On Restate 1.6 and newer, re-registering an unchanged deployment
+   *   creates no new revision and leaves visibility as it is. Use this when one deployment serves both public and
+   *   private services. Requires the registration handler that ships with this library version: a handler passed via
+   *   `ServiceDeployerProps.code` that predates this option treats `"declared"` as private and marks every service
+   *   private.
+   *
+   * Default: the value implied by `private`, i.e. `"public"` when neither option is set.
+   *
+   * @see https://docs.restate.dev/operate/registration#private-services
+   */
+  visibility?: ServiceVisibility;
 
   /**
    * A dummy parameter to force CloudFormation to update the deployment when the configuration changes. Useful if
@@ -377,7 +404,7 @@ export class ServiceDeployer extends Construct {
             ? { serviceUri: http.uri, promoteToLatest: "true" as const, ownedEndpointPrefix: http.ownedEndpointPrefix }
             : {}),
           removalPolicy: options?.removalPolicy === cdk.RemovalPolicy.DESTROY ? "destroy" : ("retain" as const),
-          private: (options?.private ?? false).toString() as "true" | "false",
+          private: registrationVisibility(options),
           configurationVersion:
             options?.configurationVersion ??
             (handler?.functionArn.endsWith(":$LATEST") ? new Date().toISOString() : undefined),
@@ -420,5 +447,29 @@ export class ServiceDeployer extends Construct {
     }
 
     return deployment;
+  }
+}
+
+/**
+ * Encode the requested visibility as the custom resource's `private` property. Explicit modes encode as `"true"` and
+ * `"false"`, the same values that `private: true` and `private: false` produce, so templates of stacks using `private`
+ * stay unchanged.
+ */
+function registrationVisibility(options: ServiceRegistrationProps | undefined): "true" | "false" | "declared" {
+  if (options?.private !== undefined && options.visibility !== undefined) {
+    throw new Error("Set either `private` or `visibility` on a service registration, not both.");
+  }
+  const visibility = options?.visibility ?? (options?.private ? "private" : "public");
+  switch (visibility) {
+    case "public":
+      return "false";
+    case "private":
+      return "true";
+    case "declared":
+      return "declared";
+    default:
+      throw new Error(
+        `Unknown service visibility "${visibility as string}"; expected "public", "private" or "declared".`,
+      );
   }
 }

@@ -52,6 +52,7 @@ const VERSIONED_TASK_DEFINITION_PROPERTIES = [
 export type RestateFargateServiceRegistrationProps = Pick<
   ServiceRegistrationProps,
   | "private"
+  | "visibility"
   | "breaking"
   | "additionalHeaders"
   | "authToken"
