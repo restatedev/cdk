@@ -86,8 +86,9 @@ export interface RegistrationProperties {
 
   /**
    * Ingress visibility to apply after registration. `"true"` marks every service of the endpoint private, `"false"`
-   * (the default) marks them all public. `"declared"` changes nothing, so each service keeps the visibility that
-   * registration gave it: private if its definition declares `ingressPrivate`, else public.
+   * marks them all public, and so does an absent property; `ServiceDeployer` always sets it. `"declared"` changes
+   * nothing, so each service keeps the visibility that registration gave it. A new service revision is private if its
+   * definition declares `ingressPrivate`, else public; registering an unchanged deployment leaves visibility alone.
    */
   private?: "true" | "false" | "declared";
 

@@ -17,12 +17,22 @@ const greet = async (ctx, name) => {
   return `Hello ${name ?? "from Restate"}!`;
 };
 
-export const handler = restate
-  .endpoint()
-  .bind(
+const endpoint = restate.endpoint().bind(
+  restate.service({
+    name: "Greeter",
+    handlers: { greet },
+  }),
+);
+
+// Visibility tests set a name unique to their stack, so stacks sharing a Restate environment don't race over it.
+if (process.env.PRIVATE_SERVICE_NAME) {
+  endpoint.bind(
     restate.service({
-      name: "Greeter",
+      name: process.env.PRIVATE_SERVICE_NAME,
       handlers: { greet },
+      options: { ingressPrivate: true },
     }),
-  )
-  .handler();
+  );
+}
+
+export const handler = endpoint.handler();

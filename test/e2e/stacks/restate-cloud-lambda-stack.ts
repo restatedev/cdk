@@ -14,7 +14,7 @@ import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as secrets from "aws-cdk-lib/aws-secretsmanager";
 import path from "path";
 
-import { EnvironmentId, RestateCloudEnvironment, ServiceDeployer } from "../../../lib/restate-constructs";
+import type { EnvironmentId } from "../../../lib/restate-constructs";
 
 // Deploy with: RESTATE_ENV_ID=env_... RESTATE_API_KEY=key_... npx cdk --app 'npx tsx restate-cloud.e2e.ts' deploy
 const app = new cdk.App();
@@ -23,6 +23,15 @@ const stackName = app.node.tryGetContext("stack_name") ?? "e2e-RestateCloud";
 // Optional context variable to force new Lambda versions on re-deployment
 const configurationVersion = app.node.tryGetContext("configuration_version");
 const enablePruning = app.node.tryGetContext("enable_pruning") === "true";
+// Optional name for an extra service that declares itself ingress-private.
+const privateServiceName: string | undefined = app.node.tryGetContext("private_service_name");
+// "1.7.0" builds the stack with that published release instead of this checkout, to test upgrades from it.
+const cdkLibrary: string | undefined = app.node.tryGetContext("cdk_library");
+if (cdkLibrary !== undefined && cdkLibrary !== "1.7.0") {
+  throw new Error(`Unsupported cdk_library "${cdkLibrary}"; expected "1.7.0".`);
+}
+const { RestateCloudEnvironment, ServiceDeployer }: typeof import("../../../lib/restate-constructs") =
+  cdkLibrary === "1.7.0" ? require("restate-cdk-1.7.0") : require("../../../lib/restate-constructs");
 
 const stack = new cdk.Stack(app, stackName, {
   env: {
@@ -39,7 +48,10 @@ const handler: lambda.Function = new lambda.Function(stack, "Service", {
   runtime: lambda.Runtime.NODEJS_LATEST,
   code: lambda.Code.fromAsset("../handlers/dist/"),
   handler: "bundle.handler",
-  environment: configurationVersion ? { CONFIGURATION_VERSION: configurationVersion } : undefined,
+  environment: {
+    ...(configurationVersion ? { CONFIGURATION_VERSION: configurationVersion } : {}),
+    ...(privateServiceName ? { PRIVATE_SERVICE_NAME: privateServiceName } : {}),
+  },
 });
 
 const environment = new RestateCloudEnvironment(stack, "CloudEnv", {
@@ -51,7 +63,8 @@ const environment = new RestateCloudEnvironment(stack, "CloudEnv", {
 });
 
 const deployer = new ServiceDeployer(stack, "ServiceDeployer", {
-  code: lambda.Code.fromAsset(path.join(__dirname, "../../../dist/register-service-handler")),
+  // A published release ships its own registration handler; this checkout's is built into dist/.
+  code: cdkLibrary ? undefined : lambda.Code.fromAsset(path.join(__dirname, "../../../dist/register-service-handler")),
   removalPolicy: cdk.RemovalPolicy.DESTROY,
 });
 

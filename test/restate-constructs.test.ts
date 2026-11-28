@@ -376,7 +376,7 @@ describe("Restate constructs", () => {
   });
 
   test.each([
-    { options: {}, expected: "false" },
+    { options: {}, expected: "declared" },
     { options: { private: false }, expected: "false" },
     { options: { private: true }, expected: "true" },
     { options: { visibility: "public" }, expected: "false" },

@@ -1317,7 +1317,7 @@ exports[`Restate constructs Deploy a Lambda service handler to Restate Cloud env
           - RestateInvokerRole42565598
           - Arn
       removalPolicy: retain
-      private: 'false'
+      private: declared
       insecure: 'false'
       pruneDrainedDeployments: 'false'
       revisionHistoryLimit: 0
@@ -1515,7 +1515,7 @@ exports[`Restate constructs Deploy a Lambda service handler to existing Restate 
           - InvokerRole4DB2757E
           - Arn
       removalPolicy: retain
-      private: 'false'
+      private: declared
       insecure: 'false'
       pruneDrainedDeployments: 'false'
       revisionHistoryLimit: 0
@@ -1727,7 +1727,7 @@ exports[`Restate constructs Restate Cloud Environment construct with role refere
           RestateServiceHandlerCurrentVersion40030E67133906c8c3e64312a477006cbb83133d
       invokeRoleArn: 'arn:aws:iam::654654156625:role/Invoker'
       removalPolicy: retain
-      private: 'false'
+      private: declared
       insecure: 'false'
       pruneDrainedDeployments: 'false'
       revisionHistoryLimit: 0
@@ -1851,7 +1851,7 @@ exports[`Restate constructs Service Deployer overrides 1`] = `
         - arm64
       Code:
         S3Bucket: cdk-hnb659fds-assets-account-id-region
-        S3Key: 2d7333591a48f1151a9c241b465ceaa3e1e2867d51afd0847541656c733789db.zip
+        S3Key: 85497fdac92224552af1b76b6edafdc94efffc7f7311ed10108ab048fdb14508.zip
       Description: Restate custom registration handler
       Handler: entrypoint.handler
       MemorySize: 128
@@ -1945,7 +1945,7 @@ exports[`Restate constructs Service Deployer with removal policy and pruning opt
           - InvokerRole4DB2757E
           - Arn
       removalPolicy: destroy
-      private: 'false'
+      private: declared
       insecure: 'false'
       pruneDrainedDeployments: 'true'
       revisionHistoryLimit: 5

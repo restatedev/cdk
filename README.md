@@ -35,6 +35,11 @@ npm i @restatedev/restate-cdk
 - [`RestateFargateService`](./lib/restate-constructs/restate-fargate-service.ts) - runs a Restate service on ECS
   Fargate with one immutable, separately addressable version per release, like Lambda versions; see below
 
+Both `ServiceDeployer` and `RestateFargateService` leave each service's ingress visibility as its definition declares
+it (`visibility: "declared"`): each new revision of a service with `ingressPrivate: true` is private, of every other
+service public. Registering an unchanged deployment again leaves visibility as it is. Set `visibility: "public"` or
+`"private"` to force every service in a deployment one way.
+
 For a more detailed look, please refer to the [Restate CDK documentation](https://docs.restate.dev/deploy/services/faas/lambda/cdk).
 
 ## Versioned services on ECS Fargate
@@ -158,19 +163,19 @@ already started on the new version finish there, and it is then pruned like any 
 
 ### Settings
 
-| Property                             | Default                            | Meaning                                                                                                                                                    |
-| ------------------------------------ | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `desiredCount`                       | 1                                  | Tasks of the current version                                                                                                                               |
-| `supersededVersionScaling`           | 1 to `desiredCount` tasks, CPU 70% | Scaling of a version once it is superseded. The minimum is at least 1, so suspended invocations can resume                                                 |
-| `drainDelay`                         | 5 minutes                          | How long a superseded version must stay drained before it is removed                                                                                       |
-| `pruneSchedule`                      | hourly                             | Superseded versions are checked after every release and on this schedule                                                                                   |
-| `removalPolicy`                      | `RETAIN`                           | What happens to all versions when the construct is removed. `DESTROY` deregisters and deletes them without waiting for invocations; use it for test stacks |
-| `pathPrefix`                         | derived from the construct path    | Versions are served at `${baseUrl}/${pathPrefix}/${versionId}`                                                                                             |
-| `containerName`, `containerPort`     | default container, 9080            | Where the ALB sends traffic                                                                                                                                |
-| `healthCheck`, `deregistrationDelay` | `GET /health`, 60 s                | Target group settings                                                                                                                                      |
-| `listenerRulePriorityRange`          | 40000 to 49999                     | Listener rule priorities this construct may use                                                                                                            |
-| `registration`                       |                                    | Restate registration options: `private`, `breaking`, `additionalHeaders`, `authToken`, `adminUrl`, `insecure` and the health check retry settings          |
-| `registerAfterAllResources`          | `true`                             | Registers a new version only after every other resource in the stack; turn off if your own resources must depend on the construct                          |
+| Property                             | Default                            | Meaning                                                                                                                                                         |
+| ------------------------------------ | ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `desiredCount`                       | 1                                  | Tasks of the current version                                                                                                                                    |
+| `supersededVersionScaling`           | 1 to `desiredCount` tasks, CPU 70% | Scaling of a version once it is superseded. The minimum is at least 1, so suspended invocations can resume                                                      |
+| `drainDelay`                         | 5 minutes                          | How long a superseded version must stay drained before it is removed                                                                                            |
+| `pruneSchedule`                      | hourly                             | Superseded versions are checked after every release and on this schedule                                                                                        |
+| `removalPolicy`                      | `RETAIN`                           | What happens to all versions when the construct is removed. `DESTROY` deregisters and deletes them without waiting for invocations; use it for test stacks      |
+| `pathPrefix`                         | derived from the construct path    | Versions are served at `${baseUrl}/${pathPrefix}/${versionId}`                                                                                                  |
+| `containerName`, `containerPort`     | default container, 9080            | Where the ALB sends traffic                                                                                                                                     |
+| `healthCheck`, `deregistrationDelay` | `GET /health`, 60 s                | Target group settings                                                                                                                                           |
+| `listenerRulePriorityRange`          | 40000 to 49999                     | Listener rule priorities this construct may use                                                                                                                 |
+| `registration`                       |                                    | Restate registration options: `visibility`, `private`, `breaking`, `additionalHeaders`, `authToken`, `adminUrl`, `insecure` and the health check retry settings |
+| `registerAfterAllResources`          | `true`                             | Registers a new version only after every other resource in the stack; turn off if your own resources must depend on the construct                               |
 
 Use `invalidateVersionBasedOn("...")` to force a new version when the task definition is unchanged. A reference to
 another resource, such as a bucket name in an environment variable, is hashed as the reference itself. If that resource
